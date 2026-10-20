@@ -44,9 +44,16 @@ export async function POST(request: Request) {
         },
       ],
       max_tokens: 250,
+      // Nebius-specific option passed through the OpenAI-compatible SDK.
+      ...{
+        chat_template_kwargs: {
+          enable_thinking: false,
+        },
+      },
     });
 
     const reply = completion.choices[0]?.message?.content;
+    console.log(completion.choices[0]?.finish_reason);
 
     if (!reply) {
       throw new Error("Empty response from Nebius");
