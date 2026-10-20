@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const audio = formData.get("audio");//get the audio sent to the backend
-    const apiKey = process.env.SPACT_DEEPGRAM;
+    const apiKey = process.env.SPACT_DEEPGRAM_API_KEY;
 
     if (!(audio instanceof File)) { //checks the audio is a file
       return NextResponse.json(

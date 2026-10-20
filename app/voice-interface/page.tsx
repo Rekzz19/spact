@@ -12,6 +12,7 @@ export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [aiResponse, setAiResponse] = useState("");
 
   async function startRecording() {
     try {
@@ -46,7 +47,7 @@ export default function Home() {
         const formData = new FormData();
         formData.append("audio", audioBlob, "recording");
 
-        setLoading(true);
+        setLoading(true); //frontend loading message
 
         //api sending the audio data 
         try {
@@ -61,6 +62,25 @@ export default function Home() {
           }
 
           setTranscript(data.transcript);
+
+          //after setting transcript send tp chat endpoint
+          const chatResponse = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                transcript: data.transcript,
+            }),
+            });
+
+            if (!chatResponse.ok) {
+                throw new Error("Nebius request failed");
+            }
+
+            const chatData = await chatResponse.json();
+            setAiResponse(chatData.reply);
+            console.log(chatData.reply);
         } catch (err) {
           setError(
             err instanceof Error ? err.message : "An error occurred"
@@ -80,6 +100,7 @@ export default function Home() {
   function stopRecording() {
     recorderRef.current?.stop();
     setRecording(false);
+    
   }
 
   return (
@@ -105,6 +126,13 @@ export default function Home() {
           <p>{transcript}</p>
         </div>
       )}
+
+      {aiResponse && (
+        <div className="max-w-lg rounded-lg border p-4">
+            <h2 className="font-semibold">Spact</h2>
+            <p>{aiResponse}</p>
+        </div>
+    )}
 
       {error && <p className="text-red-500">{error}</p>}
     </main>
