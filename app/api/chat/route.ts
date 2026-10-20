@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { nebius } from "@/lib/ai/nebius";
 
@@ -11,18 +10,18 @@ export async function POST(request: Request) {
     if (
       typeof transcript !== "string" ||
       !transcript.trim() ||
-      transcript.length > 5000 //checks around the transcript length 
+      transcript.length > 5000 //checks around the transcript length
     ) {
       return NextResponse.json(
         { error: "Invalid transcript" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!process.env.SPACT_NEBIUS_API_KEY) {
       return NextResponse.json(
         { error: "Nebius API key missing" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -47,8 +46,7 @@ export async function POST(request: Request) {
       max_tokens: 250,
     });
 
-    const reply =
-      completion.choices[0]?.message?.content;
+    const reply = completion.choices[0]?.message?.content;
 
     if (!reply) {
       throw new Error("Empty response from Nebius");
@@ -60,7 +58,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { error: "Could not generate an AI response" },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }

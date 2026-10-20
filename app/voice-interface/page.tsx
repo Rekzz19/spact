@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useRef, useState } from "react";
@@ -19,7 +18,8 @@ export default function Home() {
       setError("");
       setTranscript("");
 
-      const stream = await navigator.mediaDevices.getUserMedia({ //user audio input
+      const stream = await navigator.mediaDevices.getUserMedia({
+        //user audio input
         audio: true,
       });
 
@@ -29,13 +29,14 @@ export default function Home() {
       const recorder = new MediaRecorder(stream); //new record event
       recorderRef.current = recorder;
 
-      recorder.ondataavailable = (event) => { //pushing the audio event data to the Blob - file like object containing raw data
+      recorder.ondataavailable = (event) => {
+        //pushing the audio event data to the Blob - file like object containing raw data
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
         }
       };
 
-      //at the end of recording data 
+      //at the end of recording data
       recorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -49,7 +50,7 @@ export default function Home() {
 
         setLoading(true); //frontend loading message
 
-        //api sending the audio data 
+        //api sending the audio data
         try {
           const response = await fetch("/api/transcribe", {
             method: "POST",
@@ -67,24 +68,22 @@ export default function Home() {
           const chatResponse = await fetch("/api/chat", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
+              "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                transcript: data.transcript,
+              transcript: data.transcript,
             }),
-            });
+          });
 
-            if (!chatResponse.ok) {
-                throw new Error("Nebius request failed");
-            }
+          if (!chatResponse.ok) {
+            throw new Error("Nebius request failed");
+          }
 
-            const chatData = await chatResponse.json();
-            setAiResponse(chatData.reply);
-            console.log(chatData.reply);
+          const chatData = await chatResponse.json();
+          setAiResponse(chatData.reply);
+          console.log(chatData.reply);
         } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "An error occurred"
-          );
+          setError(err instanceof Error ? err.message : "An error occurred");
         } finally {
           setLoading(false);
         }
@@ -100,7 +99,6 @@ export default function Home() {
   function stopRecording() {
     recorderRef.current?.stop();
     setRecording(false);
-    
   }
 
   return (
@@ -129,10 +127,10 @@ export default function Home() {
 
       {aiResponse && (
         <div className="max-w-lg rounded-lg border p-4">
-            <h2 className="font-semibold">Spact</h2>
-            <p>{aiResponse}</p>
+          <h2 className="font-semibold">Spact</h2>
+          <p>{aiResponse}</p>
         </div>
-    )}
+      )}
 
       {error && <p className="text-red-500">{error}</p>}
     </main>
