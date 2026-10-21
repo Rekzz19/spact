@@ -82,6 +82,31 @@ export default function Home() {
           const chatData = await chatResponse.json();
           setAiResponse(chatData.reply);
           console.log(chatData.reply);
+
+          //send AI res to deepgram speech
+          const speechResponse = await fetch("/api/speak", {
+            method: "POST",
+            body: JSON.stringify({
+              AiRes: chatData.reply,
+            }),
+          });
+          //handle res
+          if (!speechResponse.ok) {
+            throw new Error("Speech generation failed");
+          }
+
+          const audioBlob = await speechResponse.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+
+          audio.onended = () => URL.revokeObjectURL(audioUrl);
+          //play audio
+          try {
+            await audio.play();
+          } catch (error) {
+            URL.revokeObjectURL(audioUrl);
+            throw error;
+          }
         } catch (err) {
           setError(err instanceof Error ? err.message : "An error occurred");
         } finally {
