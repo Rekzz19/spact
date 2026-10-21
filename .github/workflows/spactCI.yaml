@@ -1,0 +1,1 @@
+#pipeline name, create a vm machine, push al the coide into it, run npm instal for dependencies, run test, eslint and format.

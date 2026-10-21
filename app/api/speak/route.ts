@@ -40,3 +40,8 @@ export async function POST(request: Request) {
     );
   }
 }
+/**
+ * Think you need history for context => database?
+ * Faster responses possibly??
+ * create tasks
+ */
