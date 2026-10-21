@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 
 export default function Home() {
   const recorderRef = useRef<MediaRecorder | null>(null); //understand ref, why ref?
@@ -13,8 +13,39 @@ export default function Home() {
   const [error, setError] = useState("");
   const [aiResponse, setAiResponse] = useState("");
 
+  //anonymous user for dev
+  async function initialiseUser() {
+    const response = await fetch("/api/auth/anonymous", {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to initialise user");
+    }
+
+    return response.json();
+  }
+
+  useEffect(() => {
+    async function init() {
+      try {
+        await initialiseUser();
+        console.log("User session ready");
+      } catch (error) {
+        console.error("Authentication failed:", error);
+      }
+    }
+
+    init();
+  }, []);
+
   async function startRecording() {
     try {
+      //create conversationid
+      await fetch("/api/superbase-conversations", {
+        method: "POST",
+      });
+
       setError("");
       setTranscript("");
 
