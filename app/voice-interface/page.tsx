@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 
 export default function Home() {
   const recorderRef = useRef<MediaRecorder | null>(null); //understand ref, why ref?
@@ -12,6 +12,65 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [aiResponse, setAiResponse] = useState("");
+  const conversationIdRef = useRef<string | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  //anonymous user for dev
+  async function initialiseUser() {
+    const response = await fetch("/api/auth/anonymous", {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to initialise user");
+    }
+
+    return response.json();
+  }
+
+  async function initialiseConversation() {
+    const existingId = sessionStorage.getItem("conversationId");
+
+    if (existingId) {
+      return existingId;
+    }
+
+    const response = await fetch("/api/superbase-conversations", {
+      //create convos id
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to create conversation");
+    }
+
+    const data = await response.json();
+
+    sessionStorage.setItem("conversationId", data.conversationId);
+
+    return data.conversationId as string;
+  }
+
+  //this runs the conversation creation when we come to the chat and checks user is authenticated
+  useEffect(() => {
+    async function init() {
+      try {
+        // Step 1: Authenticate user
+        await initialiseUser();
+
+        // Step 2: Get or create conversation
+        const conversationId = await initialiseConversation();
+
+        conversationIdRef.current = conversationId;
+
+        setSessionReady(true);
+      } catch (error) {
+        console.error("Initialisation failed:", error);
+      }
+    }
+
+    init();
+  }, []);
 
   async function startRecording() {
     try {
@@ -72,6 +131,7 @@ export default function Home() {
             },
             body: JSON.stringify({
               transcript: data.transcript,
+              conversationId: conversationIdRef.current,
             }),
           });
 
