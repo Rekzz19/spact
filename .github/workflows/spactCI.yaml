@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [lint, formatting, types, build]
+        check: [lint, formatting, types, tests, build]
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -49,6 +49,10 @@ jobs:
       - name: Check TypeScript
         if: matrix.check == 'types'
         run: npx tsc --noEmit
+
+      - name: Run API tests
+        if: matrix.check == 'tests'
+        run: npm test
 
       - name: Build production application
         if: matrix.check == 'build'
