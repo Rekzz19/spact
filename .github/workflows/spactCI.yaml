@@ -1,1 +1,60 @@
-#pipeline name, create a vm machine, push al the coide into it, run npm instal for dependencies, run test, eslint and format.
+name: Spact CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, formatting, types, build]
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        if: matrix.check == 'lint'
+        run: npm run lint
+
+      - name: Check formatting
+        if: matrix.check == 'formatting'
+        run: npm run format:check
+
+      - name: Generate Next.js types
+        if: matrix.check == 'types'
+        run: npx next typegen
+
+      - name: Check TypeScript
+        if: matrix.check == 'types'
+        run: npx tsc --noEmit
+
+      - name: Build production application
+        if: matrix.check == 'build'
+        # Build-only placeholders; CI does not exercise external services.
+        env:
+          SPACT_NEBIUS_API_KEY: ci-placeholder
+          SUPABASE_URL: https://ci-placeholder.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+        run: npm run build

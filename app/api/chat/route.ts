@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { nebius } from "@/lib/ai/nebius";
-import { ChatMessage } from "@/app/types/chatType";
+import { ChatMessage } from "@/app/types/chatType"; //check
 import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
-
-//export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +31,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
     }
 
+    const { data: messages, error: historyError } = await supabase
+      .from("messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId)
+      .order("id", { ascending: false })
+      .limit(10);
+
+    if (historyError) {
+      console.error("History retrieval failed:", historyError);
+
+      return NextResponse.json(
+        { error: "Failed to retrieve conversation history" },
+        { status: 500 },
+      );
+    }
+
+    const history = [...(messages ?? [])].reverse();
+
+    console.log("Conversation history:", history);
+
     //check api key is available
     if (!process.env.SPACT_NEBIUS_API_KEY) {
       return NextResponse.json(
@@ -54,6 +72,7 @@ export async function POST(request: Request) {
             Never claim to have saved a task,
             sent a reminder, or changed a schedule.`,
         },
+        ...history,
         {
           role: "user",
           content: transcript,
@@ -70,6 +89,8 @@ export async function POST(request: Request) {
 
     const reply = completion.choices[0]?.message?.content;
     console.log(completion.choices[0]?.finish_reason);
+    console.log("Input tokens:", completion.usage?.prompt_tokens);
+    console.log("Output tokens:", completion.usage?.completion_tokens);
 
     if (!reply) {
       throw new Error("Empty response from Nebius");
