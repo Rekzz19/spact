@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nebius } from "@/lib/ai/nebius";
-import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/chat/route";
 import { expectJson, jsonRequest, supabaseMock } from "../helpers";
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/auth/register/route";
 import { expectJson, jsonRequest } from "../helpers";
 
@@ -13,12 +13,10 @@ describe("POST /api/auth/register", () => {
   const request = () =>
     jsonRequest("auth/register", { email: "  person@example.com  " });
   beforeEach(() => {
-    getUser
-      .mockReset()
-      .mockResolvedValue({
-        data: { user: { id: "user-1", is_anonymous: true } },
-        error: null,
-      });
+    getUser.mockReset().mockResolvedValue({
+      data: { user: { id: "user-1", is_anonymous: true } },
+      error: null,
+    });
     updateUser.mockReset().mockResolvedValue({ error: null });
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: { getUser, updateUser },

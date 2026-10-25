@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 
 export async function POST() {
   try {

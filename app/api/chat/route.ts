@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { nebius } from "@/lib/ai/nebius";
 import { ChatMessage } from "@/app/types/chatType"; //check
-import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 
 export async function POST(request: Request) {
   try {
