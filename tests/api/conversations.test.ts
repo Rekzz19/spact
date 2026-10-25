@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/superbase-conversations/route";
 import { expectJson, supabaseMock } from "../helpers";
 
-vi.mock("@/lib/superbase/supabase-server", () => ({
+vi.mock("@/lib/supabase/supabase-server", () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 

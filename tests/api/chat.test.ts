@@ -7,7 +7,7 @@ import { expectJson, jsonRequest, supabaseMock } from "../helpers";
 vi.mock("@/lib/ai/nebius", () => ({
   nebius: { chat: { completions: { create: vi.fn() } } },
 }));
-vi.mock("@/lib/superbase/supabase-server", () => ({
+vi.mock("@/lib/supabase/supabase-server", () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 

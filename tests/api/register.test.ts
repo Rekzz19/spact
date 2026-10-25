@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/auth/register/route";
 import { expectJson, jsonRequest } from "../helpers";
 
-vi.mock("@/lib/superbase/supabase-server", () => ({
+vi.mock("@/lib/supabase/supabase-server", () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 
@@ -28,7 +28,10 @@ describe("POST /api/auth/register", () => {
       message:
         "Check your email and follow the confirmation link to complete registration.",
     });
-    expect(updateUser).toHaveBeenCalledWith({ email: "person@example.com" });
+    expect(updateUser).toHaveBeenCalledWith(
+      { email: "person@example.com" },
+      { emailRedirectTo: "http://localhost:3000/set-password" },
+    );
   });
 
   it.each([{}, { email: "invalid" }])(
