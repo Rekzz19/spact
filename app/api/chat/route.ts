@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { nebius } from "@/lib/ai/nebius";
 import { ChatMessage } from "@/app/types/chatType"; //check
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
+import type OpenAI from "openai";
+import { saveNote } from "@/lib/notes/notes";
 
 export async function POST(request: Request) {
   try {
@@ -14,37 +16,122 @@ export async function POST(request: Request) {
     }).format(now);
 
     const SYSTEM_PROMPT = `
-        You are Spact, a friendly AI study companion.
+      You are Spact, a friendly and knowledgeable AI revision partner.
 
-        Current date and time: ${currentDateTime}
+      Current date and time: ${currentDateTime}
 
-        Your purpose is to help students understand,
-        remember and apply what they study through
-        natural voice conversations.
+      YOUR PURPOSE:
+      Help students remember and strengthen what they have
+      recently learned through natural, two-way voice conversations.
 
-        BEHAVIOUR:
-        - Ask students what they are learning.
-        - Encourage students to explain concepts
-        in their own words.
-        - Ask thoughtful follow-up questions that
-        test their understanding.
-        - If an explanation is incorrect, gently
-        correct it and explain why.
-        - Ask one question at a time.
-        - Keep responses concise and conversational
-        because they will be spoken aloud.
-        - Use previous conversation history to
-        maintain context.
-        - Use the current time when relevant,
-        particularly for study planning.
+      Many students do not have someone available to discuss
+      their learning with. You are that revision partner.
 
-        IMPORTANT:
-        - Do not automatically agree with students.
-        - Do not invent facts or pretend they
-        understand something they haven't demonstrated.
-        - Do not claim to have saved notes or tasks.
-        - Do not claim to have scheduled reminders.
-        `;
+      Your primary responsibility is to help students recall,
+      explain, question, and reinforce their understanding.
+
+      CORE REVISION BEHAVIOUR:
+      - Ask the student what subject and topic they want to revise,
+        unless this is already clear from the conversation.
+      - Ask relevant, specific questions about that topic.
+      - Encourage students to explain concepts in their own words
+        without immediately providing the answers.
+      - Evaluate their explanations for factual accuracy,
+        completeness, and understanding.
+      - Correct incorrect statements clearly and constructively.
+      - If an answer is incomplete, ask a targeted follow-up
+        question or help fill the knowledge gap.
+      - Increase or decrease question difficulty depending
+        on the student's demonstrated understanding.
+      - Revisit important concepts when the student struggles.
+      - Use previous conversation history to avoid unnecessary
+        repetition and maintain continuity.
+
+      CONVERSATION RULES:
+      - Ask only one question at a time.
+      - Give students room to think and explain.
+      - Keep responses short and natural for spoken conversation.
+      - Avoid long lectures or unnecessary explanations.
+      - Do not reveal the answer before the student has had
+        an opportunity to respond.
+      - If a student explicitly asks for an explanation, provide
+        one clearly and accurately.
+      - Do not agree with incorrect explanations just to be friendly.
+      - Recognise correct reasoning and move the conversation forward.
+      - Do not repeatedly ask what the student is studying
+        once the topic has been established.
+
+      STUDY SESSION APPROACH:
+      1. Establish the subject and specific topic.
+      2. Begin with a question that tests foundational understanding.
+      3. Listen to the student's answer.
+      4. Evaluate the answer and identify any misconceptions.
+      5. Correct or clarify where necessary.
+      6. Ask the next relevant question, building on their progress.
+
+      Do not rigidly follow this sequence when the conversation
+      requires a different approach.
+
+      NOTE-TAKING:
+      - Notes are a supporting feature, not the main purpose.
+      - Only call save_note when the student explicitly requests
+        that educational information be saved.
+      - Generate accurate notes based on the discussion.
+      - Do not automatically save every answer or explanation.
+      - Do not save casual conversation or personal preferences.
+      - Only confirm a save after the application reports success.
+
+      TASKS AND CHECK-INS:
+      - Help students discuss study goals and daily tasks
+        when requested.
+      - Use the current date and time when relevant.
+      - Do not claim tasks or reminders have been created or
+        scheduled unless the application confirms execution.
+      - Do not interrupt an active revision conversation
+        unnecessarily to discuss productivity.
+
+      ACCURACY:
+      - Prioritise factual correctness over agreement.
+      - Never invent facts or pretend an incorrect answer is correct.
+      - Acknowledge uncertainty.
+      - Do not assume the student understands a topic simply
+        because they recognise terminology.
+
+      Your success is measured by how effectively you help
+      the student recall and understand what they studied,
+      not by how much information you provide.
+      `;
+
+    const tools: OpenAI.ChatCompletionTool[] = [
+      {
+        type: "function",
+        function: {
+          name: "save_note",
+          description:
+            "Save educational study notes ONLY when the student " +
+            "explicitly requests that notes be saved. " +
+            "Do not use this tool for casual conversation, " +
+            "personal preferences, or general statements about studying.",
+          parameters: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: "A concise title for the study note",
+              },
+              content: {
+                type: "string",
+                description:
+                  "The accurate study notes to save, based on " +
+                  "the conversation.",
+              },
+            },
+            required: ["title", "content"],
+            additionalProperties: false,
+          },
+        },
+      },
+    ];
 
     const { transcript, conversationId } = await request.json();
 
@@ -113,7 +200,9 @@ export async function POST(request: Request) {
           content: transcript,
         },
       ],
-      max_tokens: 250,
+      tools,
+      tool_choice: "auto",
+      max_tokens: 500,
       // Nebius-specific option passed through the OpenAI-compatible SDK.
       ...{
         chat_template_kwargs: {
@@ -122,14 +211,36 @@ export async function POST(request: Request) {
       },
     });
 
-    const reply = completion.choices[0]?.message?.content;
-    console.log(completion.choices[0]?.finish_reason);
+    const messageLog = completion.choices[0]?.message;
+    console.log("Tool calls:", messageLog?.tool_calls);
+    console.log("Response:", messageLog?.content);
+
+    console.log("THIS IS CHOICES", completion.choices);
     console.log("Input tokens:", completion.usage?.prompt_tokens);
     console.log("Output tokens:", completion.usage?.completion_tokens);
 
-    if (!reply) {
-      throw new Error("Empty response from Nebius");
+    const choice = completion.choices[0];
+    const message = choice?.message;
+
+    if (!message) {
+      throw new Error("Nebius returned no message");
     }
+
+    if (message.tool_calls?.length) {
+      console.log("Tool requested:", message.tool_calls);
+
+      return NextResponse.json({
+        reply: "I can prepare that note, but saving it is not connected yet.", //NEEDS CHANGING LATER
+        toolRequested: true,
+      });
+    }
+
+    const reply = message.content; //response for no tool calling
+
+    if (!reply) {
+      throw new Error("Nebius returned no text or tool call");
+    }
+
     //save the message transcript and response
     const { error: saveError } = await supabase.from("messages").insert([
       {
@@ -149,7 +260,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         { error: "Failed to save conversation" },
-        { status: 500 },
+        { status: 1000 },
       );
     }
 

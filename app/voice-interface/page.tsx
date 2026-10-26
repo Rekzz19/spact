@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import Link from "next/link";
 import LogoutButton from "@/app/components/LogoutButton";
+import Sidebar from "../components/Sidebar";
 
 export default function Home() {
   const recorderRef = useRef<MediaRecorder | null>(null); //understand ref, why ref?
@@ -14,64 +16,88 @@ export default function Home() {
   const [error, setError] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const conversationIdRef = useRef<string | null>(null);
-  const [sessionReady, setSessionReady] = useState(false);
+  const userIdRef = useRef<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<
+    "loading" | "authenticated" | "unauthenticated"
+  >("loading");
 
-  //anonymous user for dev
-  async function initialiseUser() {
-    const response = await fetch("/api/auth/anonymous", {
-      method: "POST",
-    });
+  // Checking the session never creates an anonymous account.
+  useEffect(() => {
+    let cancelled = false;
+    async function initialiseUser() {
+      //check for session
+      try {
+        const response = await fetch("/api/auth/session", {
+          method: "GET",
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        if (response.status === 401) {
+          setAuthStatus("unauthenticated");
+          return;
+        }
+        if (!response.ok) throw new Error("Session check failed");
 
-    if (!response.ok) {
-      throw new Error("Failed to initialise user");
+        //when there is a session
+        const session = await response.json();
+        if (cancelled) return;
+        userIdRef.current = session.authenticated ? session.userId : null;
+        setAuthStatus(
+          session.authenticated && !session.anonymous
+            ? "authenticated"
+            : "unauthenticated",
+        );
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Session check failed");
+        setAuthStatus("unauthenticated");
+      }
     }
-
-    return response.json();
-  }
+    void initialiseUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function initialiseConversation() {
-    const existingId = sessionStorage.getItem("conversationId");
+    if (conversationIdRef.current) return conversationIdRef.current;
 
+    // Create a guest only when they send their first recording.
+    // Existing guest sessions can be reused without creating another identity.
+    if (!userIdRef.current) {
+      const anonymousUser = await fetch("/api/auth/anonymous", {
+        //get anonymous identity
+        method: "POST",
+      });
+
+      if (!anonymousUser.ok) throw new Error("Failed to initialise user");
+
+      //successfully creates an anonymous user.
+      const user = await anonymousUser.json();
+      userIdRef.current = user.userId; //stored the id why? - is this safe?
+    }
+    if (!userIdRef.current) throw new Error("Failed to initialise user"); //HOW DO I HANDLE THIS SCENERIO
+
+    // Do not reuse a conversation left behind by a different account.
+    const storageKey = `conversationId:${userIdRef.current}`;
+    const existingId = sessionStorage.getItem(storageKey);
     if (existingId) {
+      conversationIdRef.current = existingId; //IS STORING CONVO ID NECESSARY - YES SO IT DOESNT LOSE CONVO ID ON REFRESH
       return existingId;
     }
 
     const response = await fetch("/api/superbase-conversations", {
-      //create convos id
+      //this stored the convo
       method: "POST",
     });
-
-    if (!response.ok) {
-      throw new Error("Failed to create conversation");
-    }
-
+    if (!response.ok) throw new Error("Failed to create conversation");
     const data = await response.json();
-
-    sessionStorage.setItem("conversationId", data.conversationId);
-
-    return data.conversationId as string;
+    if (typeof data.conversationId !== "string")
+      throw new Error("Invalid conversation response");
+    sessionStorage.setItem(storageKey, data.conversationId);
+    conversationIdRef.current = data.conversationId;
+    return data.conversationId;
   }
-
-  //this runs the conversation creation when we come to the chat and checks user is authenticated
-  useEffect(() => {
-    async function init() {
-      try {
-        // Step 1: Authenticate user
-        await initialiseUser();
-
-        // Step 2: Get or create conversation
-        const conversationId = await initialiseConversation();
-
-        conversationIdRef.current = conversationId;
-
-        setSessionReady(true);
-      } catch (error) {
-        console.error("Initialisation failed:", error);
-      }
-    }
-
-    init();
-  }, []);
 
   async function startRecording() {
     try {
@@ -112,6 +138,8 @@ export default function Home() {
 
         //api sending the audio data
         try {
+          await initialiseConversation();
+
           const response = await fetch("/api/transcribe", {
             method: "POST",
             body: formData,
@@ -189,8 +217,17 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex justify-end p-6">
-        <LogoutButton />
+      <header className="flex items-start justify-between p-6">
+        <Sidebar />
+        {authStatus === "authenticated" && <LogoutButton />}
+        {authStatus === "unauthenticated" && (
+          <Link
+            href="/login"
+            className="rounded-lg border px-4 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          >
+            Log in
+          </Link>
+        )}
       </header>
       <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
         <h1 className="text-4xl font-bold">Spact</h1>
@@ -198,7 +235,7 @@ export default function Home() {
 
         <button
           onClick={recording ? stopRecording : startRecording}
-          disabled={loading}
+          disabled={loading || authStatus === "loading"}
           className="rounded-full bg-blue-600 px-8 py-4 text-white disabled:opacity-50"
         >
           {loading
