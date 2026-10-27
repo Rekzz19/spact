@@ -72,6 +72,16 @@ export async function POST(request: Request) {
       Do not rigidly follow this sequence when the conversation
       requires a different approach.
 
+      RESPONSE FORMAT:
+      - Your responses will be converted directly into speech.
+      - Use plain, natural, conversational language.
+      - Do not add '*' to your responses please.
+      - Do not use Markdown formatting.
+      - Do not use asterisks, bullet points, headings, or code blocks.
+      - Avoid long lists and excessive technical detail.
+      - Keep responses concise, ideally 2–4 sentences.
+      - Ask one relevant question at a time.
+
       NOTE-TAKING:
       - Notes are a supporting feature, not the main purpose.
       - Only call save_note when the student explicitly requests
@@ -187,6 +197,9 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log("Sending system prompt: revision-v2");
+    console.log("System prompt:", SYSTEM_PROMPT);
+
     const completion = await nebius.chat.completions.create({
       model: "nvidia/Nemotron-3_5-Lightning",
       messages: [
@@ -213,7 +226,7 @@ export async function POST(request: Request) {
 
     const messageLog = completion.choices[0]?.message;
     console.log("Tool calls:", messageLog?.tool_calls);
-    console.log("Response:", messageLog?.content);
+    //console.log("Response:", messageLog?.content);
 
     console.log("THIS IS CHOICES", completion.choices);
     console.log("Input tokens:", completion.usage?.prompt_tokens);
@@ -226,16 +239,50 @@ export async function POST(request: Request) {
       throw new Error("Nebius returned no message");
     }
 
+    let reply = message.content; //response for no tool calling
     if (message.tool_calls?.length) {
-      console.log("Tool requested:", message.tool_calls);
+      // Only handle the save_note tool for now
+      const toolCall = message.tool_calls.find(
+        (call) =>
+          call.type === "function" && call.function.name === "save_note",
+      );
 
-      return NextResponse.json({
-        reply: "I can prepare that note, but saving it is not connected yet.", //NEEDS CHANGING LATER
-        toolRequested: true,
-      });
+      if (!toolCall || toolCall.type !== "function") {
+        throw new Error("Unsupported tool call");
+      }
+
+      try {
+        const args: unknown = JSON.parse(toolCall.function.arguments);
+
+        if (
+          typeof args !== "object" ||
+          args === null ||
+          !("title" in args) ||
+          !("content" in args)
+        ) {
+          throw new Error("Invalid tool arguments");
+        }
+
+        const { title, content } = args;
+
+        // user comes from your existing getUser() call
+        const note = await saveNote({
+          supabase,
+          userId: user.id,
+          title: title as string,
+          content: content as string,
+          conversationId,
+        });
+
+        reply = `I've saved your note titled ${note.title}.`;
+      } catch (error) {
+        console.error("Save note tool failed:", error);
+        reply = "Sorry, I couldn't save that note. Please try again.";
+      }
     }
 
-    const reply = message.content; //response for no tool calling
+    // Enforce the spoken response format even if the model adds Markdown.
+    reply = reply?.replace(/\*/g, "").trim() ?? null;
 
     if (!reply) {
       throw new Error("Nebius returned no text or tool call");

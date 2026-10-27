@@ -130,6 +130,24 @@ describe("POST /api/chat", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("removes asterisks before returning and saving the reply", async () => {
+    create.mockResolvedValue({
+      choices: [{ message: { content: "**Correct!** What is *osmosis*?" } }],
+    } as Awaited<ReturnType<typeof nebius.chat.completions.create>>);
+
+    await expectJson(await POST(request()), 200, {
+      reply: "Correct! What is osmosis?",
+    });
+    expect(db.insert).toHaveBeenCalledWith([
+      expect.objectContaining({ role: "user", content: "Plan my day" }),
+      {
+        conversation_id: "conversation-1",
+        role: "assistant",
+        content: "Correct! What is osmosis?",
+      },
+    ]);
+  });
+
   it("handles provider errors without saving partial messages", async () => {
     create.mockRejectedValue(new Error("Provider unavailable"));
     await expectJson(await POST(request()), 502, {
