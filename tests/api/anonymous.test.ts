@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/auth/anonymous/route";
 import { expectJson, supabaseMock } from "../helpers";
 
-vi.mock("@/lib/superbase/supabase-server", () => ({
+vi.mock("@/lib/supabase/supabase-server", () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 

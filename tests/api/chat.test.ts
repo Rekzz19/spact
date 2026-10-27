@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nebius } from "@/lib/ai/nebius";
-import { createSupabaseServerClient } from "@/lib/superbase/supabase-server";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/chat/route";
 import { expectJson, jsonRequest, supabaseMock } from "../helpers";
 
 vi.mock("@/lib/ai/nebius", () => ({
   nebius: { chat: { completions: { create: vi.fn() } } },
 }));
-vi.mock("@/lib/superbase/supabase-server", () => ({
+vi.mock("@/lib/supabase/supabase-server", () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 
@@ -128,6 +128,24 @@ describe("POST /api/chat", () => {
       error: "Nebius API key missing",
     });
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("removes asterisks before returning and saving the reply", async () => {
+    create.mockResolvedValue({
+      choices: [{ message: { content: "**Correct!** What is *osmosis*?" } }],
+    } as Awaited<ReturnType<typeof nebius.chat.completions.create>>);
+
+    await expectJson(await POST(request()), 200, {
+      reply: "Correct! What is osmosis?",
+    });
+    expect(db.insert).toHaveBeenCalledWith([
+      expect.objectContaining({ role: "user", content: "Plan my day" }),
+      {
+        conversation_id: "conversation-1",
+        role: "assistant",
+        content: "Correct! What is osmosis?",
+      },
+    ]);
   });
 
   it("handles provider errors without saving partial messages", async () => {
