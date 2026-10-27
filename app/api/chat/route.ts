@@ -307,7 +307,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         { error: "Failed to save conversation" },
-        { status: 1000 },
+        { status: 500 },
       );
     }
 
