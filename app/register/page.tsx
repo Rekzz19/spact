@@ -50,7 +50,15 @@ export default function Register() {
   }
 
   return (
-    <form onSubmit={handleSubmit} aria-busy={loading}>
+    <form
+      onSubmit={handleSubmit}
+      aria-busy={loading}
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "light-dark(#ffffff, #202124)",
+        colorScheme: "light dark",
+      }}
+    >
       <label htmlFor="email">Enter your email</label>
       <input
         id="email"
