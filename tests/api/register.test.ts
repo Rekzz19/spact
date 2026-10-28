@@ -10,6 +10,7 @@ vi.mock("@/lib/supabase/supabase-server", () => ({
 describe("POST /api/auth/register", () => {
   const getUser = vi.fn();
   const updateUser = vi.fn();
+  const signInAnonymously = vi.fn();
   const request = () =>
     jsonRequest("auth/register", { email: "  person@example.com  " });
   beforeEach(() => {
@@ -18,8 +19,15 @@ describe("POST /api/auth/register", () => {
       error: null,
     });
     updateUser.mockReset().mockResolvedValue({ error: null });
+    signInAnonymously.mockReset().mockResolvedValue({
+      data: {
+        user: { id: "guest-1", is_anonymous: true },
+        session: { access_token: "guest-session" },
+      },
+      error: null,
+    });
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
-      auth: { getUser, updateUser },
+      auth: { getUser, updateUser, signInAnonymously },
     } as unknown as Awaited<ReturnType<typeof createSupabaseServerClient>>);
   });
 
@@ -32,6 +40,7 @@ describe("POST /api/auth/register", () => {
       { email: "person@example.com" },
       { emailRedirectTo: "http://localhost:3000/set-password" },
     );
+    expect(signInAnonymously).not.toHaveBeenCalled();
   });
 
   it.each([{}, { email: "invalid" }])(
@@ -44,9 +53,56 @@ describe("POST /api/auth/register", () => {
     },
   );
 
-  it("rejects missing sessions", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
+  it.each([null, { name: "AuthSessionMissingError", status: 400 }])(
+    "creates a guest session before linking an email when no user exists (%j)",
+    async (error) => {
+      getUser.mockResolvedValue({ data: { user: null }, error });
+      expect((await POST(request())).status).toBe(200);
+      expect(signInAnonymously).toHaveBeenCalledOnce();
+      expect(signInAnonymously.mock.invocationCallOrder[0]).toBeLessThan(
+        updateUser.mock.invocationCallOrder[0],
+      );
+      expect(updateUser).toHaveBeenCalledWith(
+        { email: "person@example.com" },
+        { emailRedirectTo: "http://localhost:3000/set-password" },
+      );
+    },
+  );
+
+  it("does not replace a session when verification fails unexpectedly", async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: "AuthRetryableFetchError", status: 503 },
+    });
     expect((await POST(request())).status).toBe(401);
+    expect(signInAnonymously).not.toHaveBeenCalled();
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      data: { user: null, session: null },
+      error: { message: "Unavailable", status: 500 },
+    },
+    {
+      data: { user: null, session: null },
+      error: { message: "Rate limited", status: 429 },
+    },
+    { data: { user: null, session: null }, error: null },
+    {
+      data: { user: { id: "guest-1", is_anonymous: true }, session: null },
+      error: null,
+    },
+  ])("does not link email if anonymous sign-in fails (%j)", async (result) => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    signInAnonymously.mockResolvedValue(result);
+    await expectJson(
+      await POST(request()),
+      result.error?.status === 429 ? 429 : 500,
+      {
+        error: "Unable to start registration. Please try again.",
+      },
+    );
     expect(updateUser).not.toHaveBeenCalled();
   });
 

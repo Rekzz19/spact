@@ -19,11 +19,11 @@ export async function POST(request: Request) {
     const supabase = await createSupabaseServerClient(); //gets the superbase client
 
     const {
-      data: { user },
+      data: { user: existingUser },
       error: authError,
     } = await supabase.auth.getUser(); //gets the anonymous user ID
 
-    if (authError || !user) {
+    if (authError && authError.name !== "AuthSessionMissingError") {
       return NextResponse.json(
         {
           error:
@@ -31,6 +31,21 @@ export async function POST(request: Request) {
         },
         { status: 401 },
       );
+    }
+
+    let user = existingUser;
+    if (!user) {
+      const { data, error } = await supabase.auth.signInAnonymously();
+
+      if (error || !data.user || !data.session) {
+        console.error("Anonymous registration session failed:", error?.message);
+        return NextResponse.json(
+          { error: "Unable to start registration. Please try again." },
+          { status: error?.status === 429 ? 429 : 500 },
+        );
+      }
+
+      user = data.user;
     }
 
     if (!user.is_anonymous) {

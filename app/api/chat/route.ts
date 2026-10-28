@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { nebius } from "@/lib/ai/nebius";
-import { ChatMessage } from "@/app/types/chatType"; //check
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import type OpenAI from "openai";
 import { saveNote } from "@/lib/notes/notes";
+import {
+  ConversationError,
+  resolveActiveConversation,
+} from "@/lib/conversations/conversations";
 
 export async function POST(request: Request) {
   try {
@@ -119,7 +122,7 @@ export async function POST(request: Request) {
       typeof transcript !== "string" ||
       !transcript.trim() ||
       transcript.length > 5000 || //checks around the transcript length
-      typeof conversationId !== "string"
+      (conversationId != null && typeof conversationId !== "string")
     ) {
       return NextResponse.json(
         { error: "Invalid transcript" },
@@ -139,10 +142,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
     }
 
+    const activeConversationId = await resolveActiveConversation(
+      supabase,
+      user.id,
+      conversationId,
+    );
+
     const { data: messages, error: historyError } = await supabase
       .from("messages")
       .select("role, content")
-      .eq("conversation_id", conversationId)
+      .eq("conversation_id", activeConversationId)
       .order("id", { ascending: false })
       .limit(10);
 
@@ -244,7 +253,7 @@ export async function POST(request: Request) {
           userId: user.id,
           title: title as string,
           content: content as string,
-          conversationId,
+          conversationId: activeConversationId,
         });
 
         reply = `I've saved your note titled ${note.title}.`;
@@ -264,12 +273,12 @@ export async function POST(request: Request) {
     //save the message transcript and response
     const { error: saveError } = await supabase.from("messages").insert([
       {
-        conversation_id: conversationId,
+        conversation_id: activeConversationId,
         role: "user",
         content: transcript,
       },
       {
-        conversation_id: conversationId,
+        conversation_id: activeConversationId,
         role: "assistant",
         content: reply,
       },
@@ -285,8 +294,18 @@ export async function POST(request: Request) {
     }
 
     //return the response
-    return NextResponse.json({ reply });
+    return NextResponse.json({
+      reply,
+      conversationId: activeConversationId,
+      userId: user.id,
+    });
   } catch (error) {
+    if (error instanceof ConversationError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
     console.error("Nebius request failed:", error);
 
     return NextResponse.json(

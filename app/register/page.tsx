@@ -1,6 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import AuthShell, {
+  authInputClass,
+  authButtonClass,
+} from "@/app/components/AuthShell";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -50,35 +54,60 @@ export default function Register() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      aria-busy={loading}
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "light-dark(#ffffff, #202124)",
-        colorScheme: "light dark",
-      }}
-    >
-      <label htmlFor="email">Enter your email</label>
-      <input
-        id="email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        value={email}
-        onChange={(event) => {
-          setEmail(event.target.value);
-          setError("");
-          setMessage("");
-        }}
-        required
-        disabled={loading}
-      />
-      <button type="submit" disabled={loading || Boolean(message)}>
-        {loading ? "Sending confirmation link..." : "Confirm"}
-      </button>
-      {message && <p role="status">{message}</p>}
-      {error && <p role="alert">{error}</p>}
-    </form>
+    <AuthShell mode="register">
+      <form
+        onSubmit={handleSubmit}
+        aria-busy={loading}
+        className="flex flex-col gap-4"
+      >
+        <label htmlFor="email" className="text-sm font-medium">
+          Email address
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          className={authInputClass}
+          aria-describedby={
+            error ? "register-error" : message ? "register-status" : undefined
+          }
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setError("");
+            setMessage("");
+          }}
+          required
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          disabled={loading || Boolean(message)}
+          className={authButtonClass}
+        >
+          {loading
+            ? "Sending confirmation link..."
+            : message
+              ? "Check your inbox"
+              : "Create account"}
+        </button>
+        {message && (
+          <p
+            id="register-status"
+            role="status"
+            className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-sm leading-relaxed text-blue-700 dark:text-blue-300"
+          >
+            {message}
+          </p>
+        )}
+        {error && (
+          <p id="register-error" role="alert" className="text-sm text-red-500">
+            {error}
+          </p>
+        )}
+      </form>
+    </AuthShell>
   );
 }

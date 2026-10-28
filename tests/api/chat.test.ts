@@ -5,7 +5,10 @@ import { POST } from "@/app/api/chat/route";
 import { expectJson, jsonRequest, supabaseMock } from "../helpers";
 
 vi.mock("@/lib/ai/nebius", () => ({
-  nebius: { chat: { completions: { create: vi.fn() } } },
+  nebius: {
+    chat: { completions: { create: vi.fn() } },
+    models: { list: vi.fn().mockResolvedValue({ data: [] }) },
+  },
 }));
 vi.mock("@/lib/supabase/supabase-server", () => ({
   createSupabaseServerClient: vi.fn(),
@@ -17,10 +20,38 @@ describe("POST /api/chat", () => {
   const request = () =>
     jsonRequest("chat", {
       transcript: "Plan my day",
-      conversationId: "conversation-1",
+      conversationId: "11111111-1111-4111-8111-111111111111",
     });
   beforeEach(() => {
+    vi.mocked(nebius.models.list).mockResolvedValue({
+      data: [],
+    } as unknown as Awaited<ReturnType<typeof nebius.models.list>>);
     db = supabaseMock();
+    const ownership = {
+      eq: vi.fn(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { id: "11111111-1111-4111-8111-111111111111" },
+        error: null,
+      }),
+    };
+    ownership.eq.mockReturnValue(ownership);
+    const originalFrom = db.from.getMockImplementation()!;
+    const activity = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      order: vi.fn(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+    activity.select.mockReturnValue(activity);
+    activity.eq.mockReturnValue(activity);
+    activity.order.mockReturnValue(activity);
+    const messageSelect = db.select.getMockImplementation()!;
+    db.select.mockImplementation((columns) =>
+      columns === "created_at" ? activity : messageSelect(),
+    );
+    db.from.mockImplementation((table) =>
+      table === "conversations" ? { select: () => ownership } : originalFrom(),
+    );
     vi.stubEnv("SPACT_NEBIUS_API_KEY", "test-nebius");
     vi.mocked(createSupabaseServerClient).mockResolvedValue(
       db as unknown as Awaited<ReturnType<typeof createSupabaseServerClient>>,
@@ -43,10 +74,15 @@ describe("POST /api/chat", () => {
     db.limit.mockResolvedValue({ data: [newer, older], error: null });
     await expectJson(await POST(request()), 200, {
       reply: "What is your priority?",
+      userId: "user-1",
+      conversationId: "11111111-1111-4111-8111-111111111111",
     });
     expect(db.from).toHaveBeenCalledWith("messages");
     expect(db.select).toHaveBeenCalledWith("role, content");
-    expect(db.eq).toHaveBeenCalledWith("conversation_id", "conversation-1");
+    expect(db.eq).toHaveBeenCalledWith(
+      "conversation_id",
+      "11111111-1111-4111-8111-111111111111",
+    );
     expect(db.order).toHaveBeenCalledWith("id", { ascending: false });
     expect(db.limit).toHaveBeenCalledWith(10);
     expect(create).toHaveBeenCalledWith(
@@ -62,12 +98,12 @@ describe("POST /api/chat", () => {
     );
     expect(db.insert).toHaveBeenCalledWith([
       {
-        conversation_id: "conversation-1",
+        conversation_id: "11111111-1111-4111-8111-111111111111",
         role: "user",
         content: "Plan my day",
       },
       {
-        conversation_id: "conversation-1",
+        conversation_id: "11111111-1111-4111-8111-111111111111",
         role: "assistant",
         content: "What is your priority?",
       },
@@ -111,6 +147,8 @@ describe("POST /api/chat", () => {
     db.limit.mockResolvedValue({ data: null, error: null });
     await expectJson(await POST(request()), 200, {
       reply: "What is your priority?",
+      userId: "user-1",
+      conversationId: "11111111-1111-4111-8111-111111111111",
     });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,11 +175,13 @@ describe("POST /api/chat", () => {
 
     await expectJson(await POST(request()), 200, {
       reply: "Correct! What is osmosis?",
+      userId: "user-1",
+      conversationId: "11111111-1111-4111-8111-111111111111",
     });
     expect(db.insert).toHaveBeenCalledWith([
       expect.objectContaining({ role: "user", content: "Plan my day" }),
       {
-        conversation_id: "conversation-1",
+        conversation_id: "11111111-1111-4111-8111-111111111111",
         role: "assistant",
         content: "Correct! What is osmosis?",
       },
