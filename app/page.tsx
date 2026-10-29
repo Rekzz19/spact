@@ -1,70 +1,29 @@
 "use client";
 
-import { useRef, useState, useEffect, useReducer, useCallback } from "react";
+import { useRef, useState, useEffect, useReducer } from "react";
 import Link from "next/link";
 import LogoutButton from "@/app/components/LogoutButton";
 import Sidebar from "@/app/components/Sidebar";
 import ConversationMessages from "@/app/components/ConversationMessages";
 import { chatReducer, emptyChat } from "@/lib/conversations/chat-state";
+import { useSpeechPlayback } from "@/app/hooks/useSpeechPlayback";
 import {
   createDiagnostics,
   playbackDiagnostics,
 } from "@/lib/diagnostics/client";
 
-function releaseSpeech(playback: { audio: HTMLAudioElement; url: string }) {
-  playback.audio.onplaying = null;
-  playback.audio.onended = null;
-  playback.audio.onerror = null;
-  playback.audio.pause();
-  playback.audio.currentTime = 0;
-  URL.revokeObjectURL(playback.url);
-}
-
 export default function Home() {
   const recorderRef = useRef<MediaRecorder | null>(null); //understand ref, why ref?
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const speechRef = useRef<{ audio: HTMLAudioElement; url: string } | null>(
-    null,
-  );
   const speechRequestRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(false);
-  const speechDiagnosticsRef = useRef<ReturnType<
-    typeof createDiagnostics
-  > | null>(null);
   const gestureAtRef = useRef(0);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
-  const stopSpeaking = useCallback(() => {
-    const playback = speechRef.current;
-    speechRef.current = null;
-    if (playback) {
-      speechDiagnosticsRef.current?.record(
-        "speech.stopped",
-        playbackDiagnostics(playback.audio),
-        true,
-      );
-      releaseSpeech(playback);
-    }
-    speechDiagnosticsRef.current = null;
-    setIsSpeaking(false);
-  }, []);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       speechRequestRef.current?.abort();
-      const playback = speechRef.current;
-      speechRef.current = null;
-      if (playback) {
-        speechDiagnosticsRef.current?.record(
-          "speech.stopped",
-          { stage: "unmount" },
-          true,
-        );
-        releaseSpeech(playback);
-      }
     };
   }, []);
 
@@ -76,6 +35,14 @@ export default function Home() {
   const busyRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const {
+    isSpeaking,
+    needsPlay,
+    stop: stopSpeaking,
+    unlock: unlockSpeech,
+    retry: retrySpeech,
+    play: playSpeech,
+  } = useSpeechPlayback(setError);
 
   const conversationIdRef = useRef<string | null>(null);
   const userIdRef = useRef<string | null>(null);
@@ -240,6 +207,8 @@ export default function Home() {
   }
 
   async function startRecording() {
+    stopSpeaking();
+    unlockSpeech();
     try {
       setError("");
       busyRef.current = true;
@@ -407,71 +376,12 @@ export default function Home() {
             mimeType: audioBlob.type,
           });
           if (!mountedRef.current || speechController.signal.aborted) return;
-          stopSpeaking();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          const playback = { audio, url: audioUrl };
-          speechRef.current = playback;
-          speechDiagnosticsRef.current = speechDiagnostics;
-          const diagnostics = speechDiagnostics;
-
-          audio.onplaying = () => {
-            if (speechRef.current === playback) {
-              diagnostics.record(
-                "speech.play.started",
-                playbackDiagnostics(audio),
-                true,
-              );
-              setIsSpeaking(true);
-            }
-          };
-          audio.onended = () => {
-            if (speechRef.current === playback) {
-              diagnostics.record(
-                "speech.ended",
-                playbackDiagnostics(audio),
-                true,
-              );
-              speechDiagnosticsRef.current = null;
-              stopSpeaking();
-            }
-          };
-          audio.onerror = () => {
-            if (speechRef.current !== playback) return;
-            diagnostics.record(
-              "speech.media.error",
-              {
-                ...playbackDiagnostics(audio),
-                errorMessage: audio.error?.message,
-              },
-              true,
-            );
-            speechDiagnosticsRef.current = null;
-            stopSpeaking();
-            setError("Speech playback failed. Please try again.");
-          };
-          //play audio
           speechStage = "playback";
-          diagnostics.record("speech.play.requested", {
-            ...playbackDiagnostics(audio),
-            sinceGestureMs: Math.round(
-              performance.now() - gestureAtRef.current,
-            ),
-          });
-          try {
-            await audio.play();
-          } catch (error) {
-            if (speechRef.current === playback) {
-              diagnostics.record(
-                "speech.play.rejected",
-                { ...playbackDiagnostics(audio), error },
-                true,
-              );
-              speechDiagnosticsRef.current = null;
-              stopSpeaking();
-              throw error;
-            }
-          }
+          await playSpeech(
+            audioBlob,
+            speechDiagnostics,
+            Math.round(performance.now() - gestureAtRef.current),
+          );
         } catch (err) {
           if (speechDiagnostics && speechStage !== "playback") {
             speechDiagnostics.record(
@@ -500,6 +410,7 @@ export default function Home() {
 
   function stopRecording() {
     gestureAtRef.current = performance.now();
+    unlockSpeech();
     recorderRef.current?.stop();
     setRecording(false);
   }
@@ -529,6 +440,15 @@ export default function Home() {
           className="rounded-full border border-zinc-400 px-6 py-4 font-medium transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:hover:bg-white/10"
         >
           Stop speaking
+        </button>
+      )}
+      {needsPlay && (
+        <button
+          type="button"
+          onClick={retrySpeech}
+          className="rounded-full border border-blue-500 px-6 py-4 font-medium text-blue-500 hover:bg-blue-500/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          Play response
         </button>
       )}
     </div>

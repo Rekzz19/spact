@@ -490,3 +490,181 @@ describe("Browser speech diagnostics", () => {
     ]);
   });
 });
+
+describe("Blocked audio fallback", () => {
+  it("retains blocked audio, enables recording and retries directly from Play response", async () => {
+    play
+      .mockRejectedValueOnce(
+        new DOMException("User gesture required", "NotAllowedError"),
+      )
+      .mockResolvedValueOnce(undefined);
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    expect(button("Start Recording").disabled).toBe(false);
+    expect(button("Play response")).not.toBeNull();
+    expect(text()).not.toContain("Stop speaking");
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    const requestCount = callsTo("/api/speak").length;
+    await click(button("Play response"));
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(callsTo("/api/speak")).toHaveLength(requestCount);
+    await act(async () => SpeechAudio.last.onplaying?.());
+    expect(button("Speaking...").disabled).toBe(true);
+    expect(button("Stop speaking")).not.toBeNull();
+    expect(text()).not.toContain("Play response");
+  });
+  it("discards blocked audio when the student starts another recording", async () => {
+    play.mockRejectedValueOnce(new DOMException("Blocked", "NotAllowedError"));
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    await click(button("Start Recording"));
+    expect(text()).not.toContain("Play response");
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+  });
+});
+
+class BufferSource {
+  static instances: BufferSource[] = [];
+  onended: (() => void) | null = null;
+  buffer: unknown;
+  connect = vi.fn();
+  disconnect = vi.fn();
+  start = vi.fn();
+  stop = vi.fn();
+  constructor() {
+    BufferSource.instances.push(this);
+  }
+}
+class WebAudioContext {
+  static instances: WebAudioContext[] = [];
+  state = "suspended";
+  onstatechange: (() => void) | null = null;
+  destination = {};
+  resume = vi.fn(async () => {
+    this.state = "running";
+    this.onstatechange?.();
+  });
+  decodeAudioData = vi.fn(async () => ({ duration: 2 }));
+  createBufferSource = vi.fn(() => new BufferSource());
+  close = vi.fn(async () => {
+    this.state = "closed";
+  });
+  constructor() {
+    WebAudioContext.instances.push(this);
+  }
+}
+
+describe("Gesture-activated Web Audio speech", () => {
+  beforeEach(() => {
+    WebAudioContext.instances = [];
+    BufferSource.instances = [];
+    vi.stubGlobal("AudioContext", WebAudioContext);
+  });
+  it("resumes audio during the recording tap before microphone access and reuses the context for later replies", async () => {
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    const context = WebAudioContext.instances[0];
+    expect(context.resume.mock.invocationCallOrder[0]).toBeLessThan(
+      getUserMedia.mock.invocationCallOrder[0],
+    );
+    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+    expect(BufferSource.instances[0].start).toHaveBeenCalledOnce();
+    expect(button("Speaking...").disabled).toBe(true);
+    expect(play).not.toHaveBeenCalled();
+    await click(button("Stop speaking"));
+    expect(BufferSource.instances[0].stop).toHaveBeenCalledOnce();
+    expect(button("Start Recording").disabled).toBe(false);
+    await recordAndSend();
+    expect(WebAudioContext.instances).toHaveLength(1);
+    expect(BufferSource.instances).toHaveLength(2);
+    const reports = callsTo("/api/diagnostics").map(([, options]) =>
+      JSON.parse(options!.body as string),
+    );
+    expect(reports.flatMap((report) => report.events)).toContainEqual(
+      expect.objectContaining({
+        event: "speech.play.started",
+        engine: "webaudio",
+        contextState: "running",
+      }),
+    );
+  });
+  it("enables recording and offers Play response if context activation was denied", async () => {
+    await render(createElement(VoicePage));
+    await click(button("Start Recording"));
+    const context = WebAudioContext.instances[0];
+    context.state = "suspended";
+    context.resume.mockImplementation(async () => {});
+    await click(button("Stop Recording"));
+    await act(async () => {
+      await Recorder.last.completion;
+    });
+    expect(button("Play response")).not.toBeNull();
+    expect(button("Start Recording").disabled).toBe(false);
+    expect(BufferSource.instances).toHaveLength(0);
+    context.resume.mockImplementation(async () => {
+      context.state = "running";
+    });
+    await click(button("Play response"));
+    expect(button("Speaking...").disabled).toBe(true);
+    expect(callsTo("/api/speak")).toHaveLength(1);
+    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+  });
+  it("recovers from an interrupted context with a new Play response tap", async () => {
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    const context = WebAudioContext.instances[0];
+    await act(async () => {
+      context.state = "interrupted";
+      context.onstatechange?.();
+    });
+    expect(button("Play response")).not.toBeNull();
+    expect(button("Start Recording").disabled).toBe(false);
+    expect(BufferSource.instances[0].stop).toHaveBeenCalledOnce();
+    await click(button("Play response"));
+    expect(button("Speaking...").disabled).toBe(true);
+  });
+  it("re-enables recording at the end of buffered playback and closes the context on unmount", async () => {
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    const context = WebAudioContext.instances[0];
+    await act(async () => BufferSource.instances[0].onended?.());
+    expect(button("Start Recording").disabled).toBe(false);
+    expect(text()).not.toContain("Stop speaking");
+    await unmount();
+    expect(context.close).toHaveBeenCalledOnce();
+  });
+  it("keeps the fallback available if a resume attempt hangs", async () => {
+    await render(createElement(VoicePage));
+    await click(button("Start Recording"));
+    const context = WebAudioContext.instances[0];
+    context.state = "suspended";
+    context.resume.mockImplementation(async () => {});
+    await click(button("Stop Recording"));
+    await act(async () => {
+      await Recorder.last.completion;
+    });
+    vi.useFakeTimers();
+    context.resume.mockImplementation(() => new Promise<void>(() => {}));
+    await click(button("Play response"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(button("Play response")).not.toBeNull();
+    expect(button("Start Recording").disabled).toBe(false);
+  });
+  it("does not start a decoded response after navigation", async () => {
+    await render(createElement(VoicePage));
+    await click(button("Start Recording"));
+    const pending = deferred<{ duration: number }>();
+    WebAudioContext.instances[0].decodeAudioData.mockReturnValue(
+      pending.promise,
+    );
+    await click(button("Stop Recording"));
+    await unmount();
+    await finish(pending, { duration: 2 });
+    await act(async () => {
+      await Recorder.last.completion;
+    });
+    expect(BufferSource.instances).toHaveLength(0);
+  });
+});

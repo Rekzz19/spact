@@ -4,6 +4,9 @@ export const diagnosticEvents = [
   "speech.audio.received",
   "speech.play.requested",
   "speech.play.started",
+  "speech.context.state",
+  "speech.decode.failed",
+  "speech.play.retry",
   "speech.play.rejected",
   "speech.media.error",
   "speech.request.failed",
@@ -33,6 +36,8 @@ export const stringFields = [
   "mimeType",
   "visibility",
   "stage",
+  "engine",
+  "contextState",
 ] as const;
 
 export function safeDiagnosticString(value: string, max = 300) {

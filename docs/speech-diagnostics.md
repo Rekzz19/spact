@@ -1,7 +1,19 @@
 # Production speech diagnostics
 
-This instrumentation diagnoses speech failures; it does not change Safari's
-playback policy, the audio format, or Spact's playback flow.
+Diagnostics remain enabled for the gesture-activated Web Audio playback path and
+the HTML audio fallback. The format remains Deepgram MP3; browser playback
+policies are respected rather than bypassed.
+
+The voice page creates/resumes one AudioContext directly on Start Recording and
+Stop Recording taps, before asynchronous work. Responses are decoded into buffers
+and played through that context. If audio is blocked or the context is suspended,
+Play response appears and recording remains enabled. That tap resumes the context
+(or retries the retained HTML audio) without another speech-generation request.
+Starting another recording discards any pending response audio.
+
+Stop speaking stops the current source but keeps the context for the next reply.
+The context and audio resources are released when the page unmounts. An interrupted
+context offers Play response rather than leaving recording disabled.
 
 ## Reproduce on Vercel
 
@@ -47,7 +59,13 @@ Useful fields:
 - `speech.audio.received`: actual downloaded Blob `bytes` and `mimeType`.
 - `speech.play.requested`: elapsed time since Stop Recording, document visibility,
   and transient/sticky user activation when the browser exposes those fields.
-- `speech.play.started`: actual `playing` event.
+- `speech.play.started`: HTML `playing` event or a buffer source started in a
+  running audio context. `engine` identifies `htmlaudio` or `webaudio`.
+- `speech.context.state`: audio context state changes, including interruption.
+- `speech.decode.failed`: Web Audio could not decode the response and HTML audio
+  fallback is being attempted.
+- `speech.play.retry`: the user tapped Play response. The same attempt ID and
+  retained audio are reused; no new Deepgram request is required.
 - `speech.play.rejected`: exception name/message and media state.
 - `speech.media.error`: the media error code/message after creating the player.
 - `speech.ended` / `speech.stopped`: natural completion or application stop.
