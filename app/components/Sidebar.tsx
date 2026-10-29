@@ -47,7 +47,7 @@ export default function Sidebar() {
           setOpen(true);
           void loadNotes();
         }}
-        className="rounded-lg border p-2 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-600 dark:hover:bg-zinc-900"
+        className="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg border p-2 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-blue-600 dark:hover:bg-zinc-900"
       >
         <svg
           width="20"

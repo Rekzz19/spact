@@ -29,8 +29,12 @@ export default function Home() {
           throw new Error("Session check failed");
         }
 
-        // Existing student session
-        setAuthStatus("authenticated");
+        const session = await response.json();
+        setAuthStatus(
+          session.authenticated && !session.anonymous
+            ? "authenticated"
+            : "unauthenticated",
+        );
       } catch (error) {
         console.error("Authentication error:", error);
         setAuthStatus("unauthenticated");
@@ -63,7 +67,7 @@ export default function Home() {
       }}
       className="flex flex-1 flex-col font-sans"
     >
-      <header className="flex items-center justify-between p-6">
+      <header className="relative z-10 flex items-center justify-between p-6">
         <Link
           href="/"
           className="rounded text-2xl font-bold tracking-tight text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600"
@@ -71,6 +75,14 @@ export default function Home() {
           Spact
         </Link>
         {authStatus === "authenticated" && <LogoutButton />}
+        {authStatus === "unauthenticated" && (
+          <Link
+            href="/register"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            Sign up
+          </Link>
+        )}
       </header>
       <main className="flex flex-1 flex-col items-center justify-center gap-8 px-5 py-20 text-center sm:px-8">
         <section

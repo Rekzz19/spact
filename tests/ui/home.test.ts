@@ -26,6 +26,9 @@ describe("Home page and animation", () => {
     await click(button("Start speaking"));
     expect(router.push).toHaveBeenCalledWith("/");
     expect(document.querySelector('a[href="/"]')?.textContent).toBe("Spact");
+    expect(
+      document.querySelector('header a[href="/register"]')?.textContent,
+    ).toBe("Sign up");
   });
   it("renders logout for a signed-in account", async () => {
     vi.mocked(fetch).mockResolvedValue(
@@ -33,6 +36,19 @@ describe("Home page and animation", () => {
     );
     await render(createElement(Home));
     expect(button("Log out")).not.toBeNull();
+    expect(document.querySelector('header a[href="/register"]')).toBeNull();
+  });
+  it("offers signup to anonymous guests instead of logout", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      json({ authenticated: true, userId: "guest-1", anonymous: true }),
+    );
+    await render(createElement(Home));
+    expect(
+      document.querySelector('header a[href="/register"]')?.textContent,
+    ).toBe("Sign up");
+    expect(document.querySelector("header")?.textContent).not.toContain(
+      "Log out",
+    );
   });
   it("rotates words on schedule and clears its timer on unmount", async () => {
     vi.useFakeTimers();

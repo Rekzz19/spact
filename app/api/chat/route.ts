@@ -138,15 +138,18 @@ export async function POST(request: Request) {
         },
       },
     });
+    // Debug the complete response
+    console.log("====== NEMOTRON RAW RESPONSE ======");
+    console.dir(completion, { depth: null });
 
     //---->DEBUG<---//
-    console.log("The Model returned:", completion.model);
-    const models = await nebius.models.list();
-    console.log(models.data.map((model) => model.id));
-    const messageLog = completion.choices[0]?.message;
-    console.log("Tool calls:", messageLog?.tool_calls);
-    console.log("Input tokens:", completion.usage?.prompt_tokens);
-    console.log("Output tokens:", completion.usage?.completion_tokens);
+    // console.log("The Model returned:", completion.model);
+    // const models = await nebius.models.list();
+    // console.log(models.data.map((model) => model.id));
+    // const messageLog = completion.choices[0]?.message;
+    // console.log("Tool calls:", messageLog?.tool_calls);
+    // console.log("Input tokens:", completion.usage?.prompt_tokens);
+    // console.log("Output tokens:", completion.usage?.completion_tokens);
 
     //---->DEBUG<----//
 

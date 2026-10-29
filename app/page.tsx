@@ -1,16 +1,49 @@
 "use client";
 
-import { useRef, useState, useEffect, useReducer } from "react";
+import { useRef, useState, useEffect, useReducer, useCallback } from "react";
 import Link from "next/link";
 import LogoutButton from "@/app/components/LogoutButton";
 import Sidebar from "@/app/components/Sidebar";
 import ConversationMessages from "@/app/components/ConversationMessages";
 import { chatReducer, emptyChat } from "@/lib/conversations/chat-state";
 
+function releaseSpeech(playback: { audio: HTMLAudioElement; url: string }) {
+  playback.audio.onplaying = null;
+  playback.audio.onended = null;
+  playback.audio.onerror = null;
+  playback.audio.pause();
+  playback.audio.currentTime = 0;
+  URL.revokeObjectURL(playback.url);
+}
+
 export default function Home() {
   const recorderRef = useRef<MediaRecorder | null>(null); //understand ref, why ref?
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const speechRef = useRef<{ audio: HTMLAudioElement; url: string } | null>(
+    null,
+  );
+  const speechRequestRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const stopSpeaking = useCallback(() => {
+    const playback = speechRef.current;
+    speechRef.current = null;
+    if (playback) releaseSpeech(playback);
+    setIsSpeaking(false);
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      speechRequestRef.current?.abort();
+      const playback = speechRef.current;
+      speechRef.current = null;
+      if (playback) releaseSpeech(playback);
+    };
+  }, []);
 
   const [recording, setRecording] = useState(false);
   const [chat, dispatchChat] = useReducer(chatReducer, emptyChat);
@@ -302,8 +335,13 @@ export default function Home() {
           });
 
           //send AI res to deepgram speech
+          if (!mountedRef.current) return;
+          speechRequestRef.current?.abort();
+          const speechController = new AbortController();
+          speechRequestRef.current = speechController;
           const speechResponse = await fetch("/api/speak", {
             method: "POST",
+            signal: speechController.signal,
             body: JSON.stringify({
               AiRes: chatData.reply,
             }),
@@ -314,24 +352,41 @@ export default function Home() {
           }
 
           const audioBlob = await speechResponse.blob();
+          if (!mountedRef.current || speechController.signal.aborted) return;
+          stopSpeaking();
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
+          const playback = { audio, url: audioUrl };
+          speechRef.current = playback;
 
-          audio.onended = () => URL.revokeObjectURL(audioUrl);
+          audio.onplaying = () => {
+            if (speechRef.current === playback) setIsSpeaking(true);
+          };
+          audio.onended = () => {
+            if (speechRef.current === playback) stopSpeaking();
+          };
+          audio.onerror = () => {
+            if (speechRef.current !== playback) return;
+            stopSpeaking();
+            setError("Speech playback failed. Please try again.");
+          };
           //play audio
           try {
             await audio.play();
           } catch (error) {
-            URL.revokeObjectURL(audioUrl);
-            throw error;
+            if (speechRef.current === playback) {
+              stopSpeaking();
+              throw error;
+            }
           }
         } catch (err) {
+          if (!mountedRef.current) return;
           if (pendingId && requestUserId)
             dispatchChat({ type: "failed", userId: requestUserId, pendingId });
           setError(err instanceof Error ? err.message : "An error occurred");
         } finally {
           busyRef.current = false;
-          setLoading(false);
+          if (mountedRef.current) setLoading(false);
         }
       };
 
@@ -350,17 +405,28 @@ export default function Home() {
 
   const hasMessages = chat.messages.length > 0;
   const recordingButton = (
-    <button
-      onClick={recording ? stopRecording : startRecording}
-      disabled={loading || historyLoading || authStatus === "loading"}
-      className="mt-4 rounded-full bg-blue-600 px-8 py-4 text-white disabled:opacity-50"
-    >
-      {loading
-        ? "Transcribing..."
-        : recording
-          ? "Stop Recording"
-          : "Start Recording"}
-    </button>
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+      <button
+        onClick={recording ? stopRecording : startRecording}
+        disabled={loading || historyLoading || authStatus === "loading"}
+        className="rounded-full bg-blue-600 px-8 py-4 text-white disabled:opacity-50"
+      >
+        {loading
+          ? "Transcribing..."
+          : recording
+            ? "Stop Recording"
+            : "Start Recording"}
+      </button>
+      {isSpeaking && (
+        <button
+          type="button"
+          onClick={stopSpeaking}
+          className="rounded-full border border-zinc-400 px-6 py-4 font-medium transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:hover:bg-white/10"
+        >
+          Stop speaking
+        </button>
+      )}
+    </div>
   );
   const feedback = (
     <>
@@ -401,7 +467,7 @@ export default function Home() {
         colorScheme: "light dark",
       }}
     >
-      <header className="flex shrink-0 items-start justify-between p-6">
+      <header className="relative z-10 flex shrink-0 items-start justify-between p-6">
         <Sidebar />
         {hasMessages && (
           <Link href="/home" className="text-xl font-bold">
@@ -432,7 +498,7 @@ export default function Home() {
           </div>
         </main>
       ) : (
-        <main className="relative -top-10 flex flex-1 flex-col items-center justify-center gap-2 p-8 leading-snug">
+        <main className="flex flex-1 flex-col items-center justify-center gap-2 p-8 pb-28 leading-snug">
           <h1 className="text-4xl font-bold">
             <Link
               href="/home"

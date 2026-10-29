@@ -57,6 +57,19 @@ class Recorder {
   }
 }
 
+class SpeechAudio {
+  static last: SpeechAudio;
+  onplaying: (() => void) | null = null;
+  onended: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  currentTime = 0;
+  pause = vi.fn();
+  play = () => play();
+  constructor() {
+    SpeechAudio.last = this;
+  }
+}
+
 beforeEach(() => {
   session = { userId };
   history = { active: true, userId, messages: [userMessage, assistantMessage] };
@@ -78,13 +91,7 @@ beforeEach(() => {
     value: { getUserMedia },
   });
   vi.stubGlobal("MediaRecorder", Recorder);
-  vi.stubGlobal(
-    "Audio",
-    class {
-      onended?: () => void;
-      play = play;
-    },
-  );
+  vi.stubGlobal("Audio", SpeechAudio);
   Object.defineProperty(URL, "createObjectURL", {
     configurable: true,
     value: vi.fn(() => "blob:test-audio"),
@@ -334,4 +341,80 @@ describe("Recording, transcription, chat and playback controls", () => {
       expect(stopTrack).toHaveBeenCalledOnce();
     },
   );
+});
+
+describe("Stop speaking playback control", () => {
+  const stopButton = () =>
+    Array.from(document.querySelectorAll("button")).find(
+      (item) => item.textContent === "Stop speaking",
+    );
+  async function startSpeech() {
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    await act(async () => SpeechAudio.last.onplaying?.());
+  }
+  it("appears only when playback actually starts, then stops and hides on click", async () => {
+    await render(createElement(VoicePage));
+    expect(stopButton()).toBeUndefined();
+    await recordAndSend();
+    expect(stopButton()).toBeUndefined();
+    await act(async () => SpeechAudio.last.onplaying?.());
+    expect(stopButton()).toBeDefined();
+    SpeechAudio.last.currentTime = 12;
+    await click(button("Stop speaking"));
+    expect(SpeechAudio.last.pause).toHaveBeenCalledOnce();
+    expect(SpeechAudio.last.currentTime).toBe(0);
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+    expect(stopButton()).toBeUndefined();
+    expect(log()?.textContent).toContain("New response");
+  });
+  it("hides and releases audio when playback ends naturally", async () => {
+    await startSpeech();
+    await act(async () => SpeechAudio.last.onended?.());
+    expect(stopButton()).toBeUndefined();
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+  });
+  it("hides and displays an error when audio playback fails", async () => {
+    await startSpeech();
+    await act(async () => SpeechAudio.last.onerror?.());
+    expect(stopButton()).toBeUndefined();
+    expect(text()).toContain("Speech playback failed");
+    expect(log()?.textContent).toContain("New response");
+  });
+  it("stops playback and releases audio on unmount", async () => {
+    await startSpeech();
+    const audio = SpeechAudio.last;
+    await unmount();
+    expect(audio.pause).toHaveBeenCalledOnce();
+    expect(audio.onended).toBeNull();
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+  });
+  it("does not start pending speech after navigation", async () => {
+    const pending = deferred<Response>();
+    speechResponse = () => pending.promise;
+    await render(createElement(VoicePage));
+    await click(button("Start Recording"));
+    await click(button("Stop Recording"));
+    const call = callsTo("/api/speak")[0];
+    expect(call).toBeDefined();
+    await unmount();
+    expect(call[1]?.signal?.aborted).toBe(true);
+    await finish(pending, new Response(new Uint8Array([1, 2])));
+    await act(async () => {
+      await Recorder.last.completion;
+    });
+    expect(play).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+  it("stops older playback before starting a new reply and ignores stale events", async () => {
+    await startSpeech();
+    const oldAudio = SpeechAudio.last;
+    const staleEnded = oldAudio.onended;
+    await recordAndSend();
+    expect(oldAudio.pause).toHaveBeenCalledOnce();
+    await act(async () => SpeechAudio.last.onplaying?.());
+    await act(async () => staleEnded?.());
+    expect(stopButton()).toBeDefined();
+    expect(SpeechAudio.last.pause).not.toHaveBeenCalled();
+  });
 });
