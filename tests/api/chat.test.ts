@@ -86,7 +86,7 @@ describe("POST /api/chat", () => {
       "11111111-1111-4111-8111-111111111111",
     );
     expect(db.order).toHaveBeenCalledWith("id", { ascending: false });
-    expect(db.limit).toHaveBeenCalledWith(10);
+    expect(db.limit).toHaveBeenCalledWith(100);
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: [
