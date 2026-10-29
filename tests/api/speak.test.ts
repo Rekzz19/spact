@@ -66,4 +66,33 @@ describe("POST /api/speak", () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("correlates server logs with the browser's speech attempt and Deepgram request ID", async () => {
+    const attemptId = "11111111-1111-4111-8111-111111111111";
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Uint8Array([1, 2]), {
+        headers: {
+          "Content-Type": "audio/mpeg",
+          "dg-request-id": "deepgram-123",
+        },
+      }),
+    );
+    const request = jsonRequest("speak", { AiRes: "Private response text" });
+    request.headers.set("X-Spact-Speech-Id", attemptId);
+    const response = await POST(request);
+    expect(response.headers.get("X-Spact-Speech-Id")).toBe(attemptId);
+    const logs = vi
+      .mocked(console.info)
+      .mock.calls.map(([entry]) => JSON.parse(entry));
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        event: "deepgram.response",
+        attemptId,
+        status: 200,
+        deepgramRequestId: "deepgram-123",
+        mimeType: "audio/mpeg",
+      }),
+    );
+    expect(JSON.stringify(logs)).not.toContain("Private response text");
+    expect(JSON.stringify(logs)).not.toContain("test-deepgram");
+  });
 });

@@ -1,6 +1,31 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+import { safeDiagnosticString } from "@/lib/diagnostics/events";
 
 export async function POST(request: Request) {
+  const suppliedId = request.headers.get("x-spact-speech-id");
+  const attemptId =
+    suppliedId && /^[0-9a-f-]{36}$/i.test(suppliedId)
+      ? suppliedId
+      : randomUUID();
+  const startedAt = performance.now();
+  const log = (
+    event: string,
+    fields: Record<string, unknown> = {},
+    failed = false,
+  ) => {
+    const entry = JSON.stringify({
+      source: "spact.server",
+      event,
+      attemptId,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      deployment: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12),
+      ...fields,
+    });
+    if (failed) console.error(entry);
+    else console.info(entry);
+  };
+  log("speech.request.started");
   try {
     const { AiRes } = await request.json();
 
@@ -16,27 +41,47 @@ export async function POST(request: Request) {
       },
     );
 
+    log(
+      "deepgram.response",
+      {
+        status: response.status,
+        mimeType: response.headers.get("Content-Type"),
+        deepgramRequestId: safeDiagnosticString(
+          response.headers.get("dg-request-id") || "",
+          100,
+        ),
+        contentLength: response.headers.get("Content-Length"),
+      },
+      !response.ok,
+    );
     if (!response.ok) {
-      console.error(
-        "Deepgram TTS error:",
-        response.status,
-        await response.text(),
-      );
       return NextResponse.json(
         { error: "Speech generation failed" },
-        { status: 502 },
+        { status: 502, headers: { "X-Spact-Speech-Id": attemptId } },
       );
     }
     return new NextResponse(response.body, {
       headers: {
         "Content-Type": response.headers.get("Content-Type") || "audio/mpeg",
+        "X-Spact-Speech-Id": attemptId,
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {
-    console.error("Speech failed", error);
+    log(
+      "speech.request.failed",
+      {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage:
+          error instanceof Error
+            ? safeDiagnosticString(error.message)
+            : "Unknown failure",
+      },
+      true,
+    );
     return NextResponse.json(
       { error: "Speech generation failed" },
-      { status: 502 },
+      { status: 502, headers: { "X-Spact-Speech-Id": attemptId } },
     );
   }
 }

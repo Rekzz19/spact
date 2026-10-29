@@ -102,6 +102,7 @@ beforeEach(() => {
   });
   vi.mocked(fetch).mockImplementation(async (url) => {
     const path = String(url);
+    if (path === "/api/diagnostics") return new Response(null, { status: 204 });
     if (path === "/api/auth/session")
       return session
         ? json({ authenticated: true, ...session })
@@ -254,7 +255,7 @@ describe("Recording, transcription, chat and playback controls", () => {
     expect(log()?.querySelectorAll("article")).toHaveLength(1);
     expect(log()?.textContent).toContain("New transcript");
     expect(text()).toContain("Waiting for Spact");
-    expect(button("Transcribing...").disabled).toBe(true);
+    expect(button("Thinking...").disabled).toBe(true);
     await finish(
       pending,
       json({ reply: "New response", conversationId: id, userId }),
@@ -360,24 +361,30 @@ describe("Stop speaking playback control", () => {
     expect(stopButton()).toBeUndefined();
     await act(async () => SpeechAudio.last.onplaying?.());
     expect(stopButton()).toBeDefined();
+    expect(button("Speaking...").disabled).toBe(true);
+    await click(button("Speaking..."));
+    expect(getUserMedia).toHaveBeenCalledOnce();
     SpeechAudio.last.currentTime = 12;
     await click(button("Stop speaking"));
     expect(SpeechAudio.last.pause).toHaveBeenCalledOnce();
     expect(SpeechAudio.last.currentTime).toBe(0);
     expect(revokeObjectURL).toHaveBeenCalledOnce();
     expect(stopButton()).toBeUndefined();
+    expect(button("Start Recording").disabled).toBe(false);
     expect(log()?.textContent).toContain("New response");
   });
   it("hides and releases audio when playback ends naturally", async () => {
     await startSpeech();
     await act(async () => SpeechAudio.last.onended?.());
     expect(stopButton()).toBeUndefined();
+    expect(button("Start Recording").disabled).toBe(false);
     expect(revokeObjectURL).toHaveBeenCalledOnce();
   });
   it("hides and displays an error when audio playback fails", async () => {
     await startSpeech();
     await act(async () => SpeechAudio.last.onerror?.());
     expect(stopButton()).toBeUndefined();
+    expect(button("Start Recording").disabled).toBe(false);
     expect(text()).toContain("Speech playback failed");
     expect(log()?.textContent).toContain("New response");
   });
@@ -410,11 +417,76 @@ describe("Stop speaking playback control", () => {
     await startSpeech();
     const oldAudio = SpeechAudio.last;
     const staleEnded = oldAudio.onended;
+    await click(button("Stop speaking"));
     await recordAndSend();
     expect(oldAudio.pause).toHaveBeenCalledOnce();
     await act(async () => SpeechAudio.last.onplaying?.());
     await act(async () => staleEnded?.());
     expect(stopButton()).toBeDefined();
     expect(SpeechAudio.last.pause).not.toHaveBeenCalled();
+  });
+});
+
+describe("Browser speech diagnostics", () => {
+  it("reports received audio and a rejected play promise under the server request's attempt ID", async () => {
+    play.mockRejectedValue(
+      new DOMException("Playback denied by browser", "NotAllowedError"),
+    );
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    const speechCall = callsTo("/api/speak")[0];
+    const attemptId = (speechCall[1]?.headers as Record<string, string>)[
+      "X-Spact-Speech-Id"
+    ];
+    const reports = callsTo("/api/diagnostics").map(([, options]) =>
+      JSON.parse(options!.body as string),
+    );
+    expect(reports).toHaveLength(1);
+    expect(reports[0].attemptId).toBe(attemptId);
+    expect(reports[0].events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "speech.audio.received",
+          bytes: 3,
+          mimeType: "audio/mpeg",
+        }),
+        expect.objectContaining({
+          event: "speech.play.rejected",
+          errorName: "NotAllowedError",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(reports)).not.toContain("New transcript");
+    expect(JSON.stringify(reports)).not.toContain("New response");
+  });
+  it("does not break playback when diagnostic reporting fails", async () => {
+    const implementation = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((url, options) =>
+      String(url) === "/api/diagnostics"
+        ? Promise.reject(new Error("Telemetry offline"))
+        : implementation(url, options),
+    );
+    await render(createElement(VoicePage));
+    await recordAndSend();
+    await act(async () => SpeechAudio.last.onplaying?.());
+    expect(button("Speaking...").disabled).toBe(true);
+    expect(log()?.textContent).toContain("New response");
+    expect(text()).not.toContain("Telemetry offline");
+  });
+  it("identifies storage access failures as history restoration errors", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Storage denied", "SecurityError");
+    });
+    await render(createElement(VoicePage));
+    const report = JSON.parse(
+      callsTo("/api/diagnostics")[0][1]!.body as string,
+    );
+    expect(report.events).toEqual([
+      expect.objectContaining({
+        event: "history.failed",
+        stage: "storage_read",
+        errorName: "SecurityError",
+      }),
+    ]);
   });
 });

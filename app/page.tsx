@@ -6,6 +6,10 @@ import LogoutButton from "@/app/components/LogoutButton";
 import Sidebar from "@/app/components/Sidebar";
 import ConversationMessages from "@/app/components/ConversationMessages";
 import { chatReducer, emptyChat } from "@/lib/conversations/chat-state";
+import {
+  createDiagnostics,
+  playbackDiagnostics,
+} from "@/lib/diagnostics/client";
 
 function releaseSpeech(playback: { audio: HTMLAudioElement; url: string }) {
   playback.audio.onplaying = null;
@@ -25,12 +29,24 @@ export default function Home() {
   );
   const speechRequestRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(false);
+  const speechDiagnosticsRef = useRef<ReturnType<
+    typeof createDiagnostics
+  > | null>(null);
+  const gestureAtRef = useRef(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const stopSpeaking = useCallback(() => {
     const playback = speechRef.current;
     speechRef.current = null;
-    if (playback) releaseSpeech(playback);
+    if (playback) {
+      speechDiagnosticsRef.current?.record(
+        "speech.stopped",
+        playbackDiagnostics(playback.audio),
+        true,
+      );
+      releaseSpeech(playback);
+    }
+    speechDiagnosticsRef.current = null;
     setIsSpeaking(false);
   }, []);
 
@@ -41,7 +57,14 @@ export default function Home() {
       speechRequestRef.current?.abort();
       const playback = speechRef.current;
       speechRef.current = null;
-      if (playback) releaseSpeech(playback);
+      if (playback) {
+        speechDiagnosticsRef.current?.record(
+          "speech.stopped",
+          { stage: "unmount" },
+          true,
+        );
+        releaseSpeech(playback);
+      }
     };
   }, []);
 
@@ -76,6 +99,7 @@ export default function Home() {
       const stale = () =>
         cancelled || signal.aborted || requestVersion !== version;
       let identityVerified = false;
+      let restoreStage = "session_fetch";
       setHistoryLoading(true);
       setHistoryError("");
       try {
@@ -106,9 +130,11 @@ export default function Home() {
         conversationIdRef.current = null;
         dispatchChat({ type: "reset", userId });
         const storageKey = `conversationId:${userId}`;
+        restoreStage = "storage_read";
         const id = sessionStorage.getItem(storageKey);
         if (!id) return;
         conversationIdRef.current = id;
+        restoreStage = "messages_fetch";
         const historyResponse = await fetch(
           `/api/conversations/${encodeURIComponent(id)}/messages?activeOnly=true`,
           { cache: "no-store", signal },
@@ -149,6 +175,11 @@ export default function Home() {
           setAuthStatus("unauthenticated");
         }
         checked = false;
+        createDiagnostics().record(
+          "history.failed",
+          { stage: restoreStage, error: err },
+          true,
+        );
         setHistoryError(
           err instanceof Error
             ? err.message
@@ -245,6 +276,9 @@ export default function Home() {
 
         setLoading(true); //frontend loading message
 
+        let speechDiagnostics: ReturnType<typeof createDiagnostics> | null =
+          null;
+        let speechStage = "request";
         let pendingId: string | null = null;
         let requestUserId: string | null = null;
         //api sending the audio data
@@ -339,47 +373,113 @@ export default function Home() {
           speechRequestRef.current?.abort();
           const speechController = new AbortController();
           speechRequestRef.current = speechController;
+          speechDiagnostics = createDiagnostics();
+          speechDiagnostics.record("speech.request.started", {
+            ...playbackDiagnostics(),
+            sinceGestureMs: Math.round(
+              performance.now() - gestureAtRef.current,
+            ),
+          });
           const speechResponse = await fetch("/api/speak", {
             method: "POST",
             signal: speechController.signal,
+            headers: {
+              "Content-Type": "application/json",
+              "X-Spact-Speech-Id": speechDiagnostics.attemptId,
+            },
             body: JSON.stringify({
               AiRes: chatData.reply,
             }),
+          });
+          speechDiagnostics.record("speech.response.received", {
+            status: speechResponse.status,
+            mimeType: speechResponse.headers.get("Content-Type"),
           });
           //handle res
           if (!speechResponse.ok) {
             throw new Error("Speech generation failed");
           }
 
+          speechStage = "audio_download";
           const audioBlob = await speechResponse.blob();
+          speechDiagnostics.record("speech.audio.received", {
+            bytes: audioBlob.size,
+            mimeType: audioBlob.type,
+          });
           if (!mountedRef.current || speechController.signal.aborted) return;
           stopSpeaking();
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
           const playback = { audio, url: audioUrl };
           speechRef.current = playback;
+          speechDiagnosticsRef.current = speechDiagnostics;
+          const diagnostics = speechDiagnostics;
 
           audio.onplaying = () => {
-            if (speechRef.current === playback) setIsSpeaking(true);
+            if (speechRef.current === playback) {
+              diagnostics.record(
+                "speech.play.started",
+                playbackDiagnostics(audio),
+                true,
+              );
+              setIsSpeaking(true);
+            }
           };
           audio.onended = () => {
-            if (speechRef.current === playback) stopSpeaking();
+            if (speechRef.current === playback) {
+              diagnostics.record(
+                "speech.ended",
+                playbackDiagnostics(audio),
+                true,
+              );
+              speechDiagnosticsRef.current = null;
+              stopSpeaking();
+            }
           };
           audio.onerror = () => {
             if (speechRef.current !== playback) return;
+            diagnostics.record(
+              "speech.media.error",
+              {
+                ...playbackDiagnostics(audio),
+                errorMessage: audio.error?.message,
+              },
+              true,
+            );
+            speechDiagnosticsRef.current = null;
             stopSpeaking();
             setError("Speech playback failed. Please try again.");
           };
           //play audio
+          speechStage = "playback";
+          diagnostics.record("speech.play.requested", {
+            ...playbackDiagnostics(audio),
+            sinceGestureMs: Math.round(
+              performance.now() - gestureAtRef.current,
+            ),
+          });
           try {
             await audio.play();
           } catch (error) {
             if (speechRef.current === playback) {
+              diagnostics.record(
+                "speech.play.rejected",
+                { ...playbackDiagnostics(audio), error },
+                true,
+              );
+              speechDiagnosticsRef.current = null;
               stopSpeaking();
               throw error;
             }
           }
         } catch (err) {
+          if (speechDiagnostics && speechStage !== "playback") {
+            speechDiagnostics.record(
+              "speech.request.failed",
+              { stage: speechStage, error: err },
+              true,
+            );
+          }
           if (!mountedRef.current) return;
           if (pendingId && requestUserId)
             dispatchChat({ type: "failed", userId: requestUserId, pendingId });
@@ -399,6 +499,7 @@ export default function Home() {
   }
 
   function stopRecording() {
+    gestureAtRef.current = performance.now();
     recorderRef.current?.stop();
     setRecording(false);
   }
@@ -408,14 +509,18 @@ export default function Home() {
     <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
       <button
         onClick={recording ? stopRecording : startRecording}
-        disabled={loading || historyLoading || authStatus === "loading"}
+        disabled={
+          loading || isSpeaking || historyLoading || authStatus === "loading"
+        }
         className="rounded-full bg-blue-600 px-8 py-4 text-white disabled:opacity-50"
       >
-        {loading
-          ? "Transcribing..."
-          : recording
-            ? "Stop Recording"
-            : "Start Recording"}
+        {isSpeaking
+          ? "Speaking..."
+          : loading
+            ? "Thinking..."
+            : recording
+              ? "Stop Recording"
+              : "Start Recording"}
       </button>
       {isSpeaking && (
         <button

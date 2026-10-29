@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       .select("role, content")
       .eq("conversation_id", activeConversationId)
       .order("id", { ascending: false })
-      .limit(10);
+      .limit(100); //increased to 100 as i am barely using the context limit 1024k tokens
 
     if (historyError) {
       console.error("History retrieval failed:", historyError);
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 
     const history = [...(messages ?? [])].reverse();
 
-    console.log("Conversation history:", history);
+    //console.log("Conversation history:", history);
 
     //check api key is available
     if (!process.env.SPACT_NEBIUS_API_KEY) {
@@ -112,8 +112,8 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("Sending system prompt: revision-v2");
-    console.log("System prompt:", SYSTEM_PROMPT);
+    //console.log("Sending system prompt: revision-v2");
+    //console.log("System prompt:", SYSTEM_PROMPT);
 
     const completion = await nebius.chat.completions.create({
       model: "nvidia/Nemotron-3_5-Lightning",
@@ -139,19 +139,10 @@ export async function POST(request: Request) {
       },
     });
     // Debug the complete response
-    console.log("====== NEMOTRON RAW RESPONSE ======");
-    console.dir(completion, { depth: null });
-
-    //---->DEBUG<---//
-    // console.log("The Model returned:", completion.model);
-    // const models = await nebius.models.list();
-    // console.log(models.data.map((model) => model.id));
-    // const messageLog = completion.choices[0]?.message;
-    // console.log("Tool calls:", messageLog?.tool_calls);
-    // console.log("Input tokens:", completion.usage?.prompt_tokens);
-    // console.log("Output tokens:", completion.usage?.completion_tokens);
-
-    //---->DEBUG<----//
+    if (process.env.NODE_ENV === "development") {
+      console.log("====== NEMOTRON RAW RESPONSE ======");
+      console.dir(completion, { depth: null });
+    }
 
     const choice = completion.choices[0];
     const message = choice?.message;

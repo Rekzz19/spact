@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
 
     const transcript =
       data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
-    console.log("THIS IS transcript", transcript);
+    if (process.env.NODE_ENV === "development")
+      console.log("THIS IS transcript", transcript);
 
     return NextResponse.json({ transcript });
   } catch (error) {

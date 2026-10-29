@@ -7,5 +7,6 @@ beforeEach(() => {
     vi.fn().mockRejectedValue(new Error("Unexpected network request")),
   );
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "info").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
