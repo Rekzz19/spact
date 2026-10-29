@@ -1,5 +1,15 @@
 // @vitest-environment jsdom
-import { render, unmount, button, click, json, deferred, finish, text } from "./helpers";
+import { knownIssue } from "../known-issues";
+import {
+  render,
+  unmount,
+  button,
+  click,
+  json,
+  deferred,
+  finish,
+  text,
+} from "./helpers";
 import { act, createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import VoicePage from "@/app/page";
@@ -7,8 +17,18 @@ import VoicePage from "@/app/page";
 const id = "11111111-1111-4111-8111-111111111111";
 const newId = "22222222-2222-4222-8222-222222222222";
 const userId = "user-1";
-const userMessage = { id: 1, role: "user", content: "Earlier question", created_at: "2026-10-28T12:00:00Z" };
-const assistantMessage = { id: 2, role: "assistant", content: "Earlier response", created_at: "2026-10-28T12:00:01Z" };
+const userMessage = {
+  id: 1,
+  role: "user",
+  content: "Earlier question",
+  created_at: "2026-10-28T12:00:00Z",
+};
+const assistantMessage = {
+  id: 2,
+  role: "assistant",
+  content: "Earlier response",
+  created_at: "2026-10-28T12:00:01Z",
+};
 const stopTrack = vi.fn();
 const getUserMedia = vi.fn();
 const play = vi.fn();
@@ -27,33 +47,62 @@ class Recorder {
   completion?: Promise<void>;
   start = vi.fn();
   stop = vi.fn(() => {
-    this.ondataavailable?.({ data: new Blob(["recorded-audio"], { type: this.mimeType }) });
+    this.ondataavailable?.({
+      data: new Blob(["recorded-audio"], { type: this.mimeType }),
+    });
     this.completion = this.onstop?.();
   });
-  constructor() { Recorder.last = this; }
+  constructor() {
+    Recorder.last = this;
+  }
 }
 
 beforeEach(() => {
   session = { userId };
   history = { active: true, userId, messages: [userMessage, assistantMessage] };
   transcriptResponse = async () => json({ transcript: "New transcript" });
-  chatResponse = async () => json({ reply: "New response", conversationId: id, userId });
-  speechResponse = async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "audio/mpeg" } });
+  chatResponse = async () =>
+    json({ reply: "New response", conversationId: id, userId });
+  speechResponse = async () =>
+    new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "Content-Type": "audio/mpeg" },
+    });
   stopTrack.mockReset();
-  getUserMedia.mockReset().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] });
+  getUserMedia
+    .mockReset()
+    .mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] });
   play.mockReset().mockResolvedValue(undefined);
   revokeObjectURL.mockReset();
-  Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia },
+  });
   vi.stubGlobal("MediaRecorder", Recorder);
-  vi.stubGlobal("Audio", class { onended?: () => void; play = play; });
-  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test-audio") });
-  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
+  vi.stubGlobal(
+    "Audio",
+    class {
+      onended?: () => void;
+      play = play;
+    },
+  );
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:test-audio"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: revokeObjectURL,
+  });
   vi.mocked(fetch).mockImplementation(async (url) => {
     const path = String(url);
-    if (path === "/api/auth/session") return session ? json({ authenticated: true, ...session }) : json({ authenticated: false }, 401);
+    if (path === "/api/auth/session")
+      return session
+        ? json({ authenticated: true, ...session })
+        : json({ authenticated: false }, 401);
     if (path.includes("/messages?activeOnly=true")) return json(history);
     if (path === "/api/auth/anonymous") return json({ userId: "guest-1" });
-    if (path === "/api/superbase-conversations") return json({ conversationId: id }, 201);
+    if (path === "/api/superbase-conversations")
+      return json({ conversationId: id }, 201);
     if (path === "/api/transcribe") return transcriptResponse();
     if (path === "/api/chat") return chatResponse();
     if (path === "/api/speak") return speechResponse();
@@ -64,10 +113,13 @@ beforeEach(() => {
 async function recordAndSend() {
   await click(button("Start Recording"));
   await click(button("Stop Recording"));
-  await act(async () => { await Recorder.last.completion; });
+  await act(async () => {
+    await Recorder.last.completion;
+  });
 }
 const log = () => document.querySelector('[role="log"]');
-const callsTo = (path: string) => vi.mocked(fetch).mock.calls.filter(([url]) => String(url) === path);
+const callsTo = (path: string) =>
+  vi.mocked(fetch).mock.calls.filter(([url]) => String(url) === path);
 
 describe("Voice page restoration (real components, mocked HTTP/browser media)", () => {
   it("renders the default screen without creating a user or conversation on load", async () => {
@@ -85,7 +137,9 @@ describe("Voice page restoration (real components, mocked HTTP/browser media)", 
     sessionStorage.setItem("conversationId:other-user", "wrong-conversation");
     await render(createElement(VoicePage));
     expect(log()?.textContent).toContain("Earlier question");
-    expect(log()?.textContent?.indexOf("Earlier question")).toBeLessThan(log()?.textContent?.indexOf("Earlier response") ?? 0);
+    expect(log()?.textContent?.indexOf("Earlier question")).toBeLessThan(
+      log()?.textContent?.indexOf("Earlier response") ?? 0,
+    );
     expect(log()?.querySelectorAll("article")).toHaveLength(2);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(callsTo("/api/superbase-conversations")).toHaveLength(0);
@@ -104,15 +158,18 @@ describe("Voice page restoration (real components, mocked HTTP/browser media)", 
   it.each([
     { active: false, messages: [] },
     { active: true, messages: [] },
-  ])("retains the default screen for expired or empty history (%j)", async (result) => {
-    sessionStorage.setItem(`conversationId:${userId}`, id);
-    history = { ...result, userId };
-    await render(createElement(VoicePage));
-    expect(log()).toBeNull();
-    expect(button("Start Recording")).not.toBeNull();
-    expect(sessionStorage.getItem(`conversationId:${userId}`)).toBe(id);
-    expect(callsTo("/api/superbase-conversations")).toHaveLength(0);
-  });
+  ])(
+    "retains the default screen for expired or empty history (%j)",
+    async (result) => {
+      sessionStorage.setItem(`conversationId:${userId}`, id);
+      history = { ...result, userId };
+      await render(createElement(VoicePage));
+      expect(log()).toBeNull();
+      expect(button("Start Recording")).not.toBeNull();
+      expect(sessionStorage.getItem(`conversationId:${userId}`)).toBe(id);
+      expect(callsTo("/api/superbase-conversations")).toHaveLength(0);
+    },
+  );
   it("disables recording while history is loading", async () => {
     const pending = deferred<Response>();
     vi.mocked(fetch).mockReturnValue(pending.promise);
@@ -124,9 +181,15 @@ describe("Voice page restoration (real components, mocked HTTP/browser media)", 
   it("discards a late history response when the page has unmounted", async () => {
     sessionStorage.setItem(`conversationId:${userId}`, id);
     const pending = deferred<Response>();
-    vi.mocked(fetch).mockImplementation(async (url) => String(url).includes("/messages?") ? pending.promise : json({ authenticated: true, userId }));
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      String(url).includes("/messages?")
+        ? pending.promise
+        : json({ authenticated: true, userId }),
+    );
     await render(createElement(VoicePage));
-    const historyCall = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes("/messages?"));
+    const historyCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => String(url).includes("/messages?"));
     const signal = (historyCall?.[1] as RequestInit).signal!;
     await unmount();
     expect(signal.aborted).toBe(true);
@@ -144,7 +207,11 @@ describe("Voice page restoration (real components, mocked HTTP/browser media)", 
   });
   it("shows retryable restoration errors without creating a conversation", async () => {
     sessionStorage.setItem(`conversationId:${userId}`, id);
-    vi.mocked(fetch).mockImplementation(async (url) => String(url).includes("/messages?") ? json({ error: "History unavailable" }, 500) : json({ authenticated: true, userId }));
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      String(url).includes("/messages?")
+        ? json({ error: "History unavailable" }, 500)
+        : json({ authenticated: true, userId }),
+    );
     await render(createElement(VoicePage));
     expect(text()).toContain("History unavailable");
     expect(button("Try again")).not.toBeNull();
@@ -155,7 +222,8 @@ describe("Voice page restoration (real components, mocked HTTP/browser media)", 
 describe("Recording, transcription, chat and playback controls", () => {
   it("records a first guest message, displays both speakers, and plays speech", async () => {
     session = null;
-    chatResponse = async () => json({ reply: "New response", conversationId: id, userId: "guest-1" });
+    chatResponse = async () =>
+      json({ reply: "New response", conversationId: id, userId: "guest-1" });
     await render(createElement(VoicePage));
     await recordAndSend();
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
@@ -164,7 +232,9 @@ describe("Recording, transcription, chat and playback controls", () => {
     expect(log()?.textContent).toContain("New transcript");
     expect(log()?.textContent).toContain("New response");
     expect(sessionStorage.getItem("conversationId:guest-1")).toBe(id);
-    expect(callsTo("/api/chat")[0][1]?.body).toBe(JSON.stringify({ transcript: "New transcript", conversationId: id }));
+    expect(callsTo("/api/chat")[0][1]?.body).toBe(
+      JSON.stringify({ transcript: "New transcript", conversationId: id }),
+    );
     expect(play).toHaveBeenCalledOnce();
     expect(button("Start Recording").disabled).toBe(false);
   });
@@ -178,13 +248,19 @@ describe("Recording, transcription, chat and playback controls", () => {
     expect(log()?.textContent).toContain("New transcript");
     expect(text()).toContain("Waiting for Spact");
     expect(button("Transcribing...").disabled).toBe(true);
-    await finish(pending, json({ reply: "New response", conversationId: id, userId }));
-    await act(async () => { await Recorder.last.completion; });
+    await finish(
+      pending,
+      json({ reply: "New response", conversationId: id, userId }),
+    );
+    await act(async () => {
+      await Recorder.last.completion;
+    });
     expect(log()?.querySelectorAll("article")).toHaveLength(2);
   });
   it("clears old chat and updates sessionStorage when the server rolls over an expired conversation", async () => {
     sessionStorage.setItem(`conversationId:${userId}`, id);
-    chatResponse = async () => json({ reply: "New response", conversationId: newId, userId });
+    chatResponse = async () =>
+      json({ reply: "New response", conversationId: newId, userId });
     await render(createElement(VoicePage));
     await recordAndSend();
     expect(log()?.querySelectorAll("article")).toHaveLength(2);
@@ -200,7 +276,8 @@ describe("Recording, transcription, chat and playback controls", () => {
     expect(callsTo("/api/transcribe")).toHaveLength(0);
   });
   it("stops after transcription failure without calling chat or speech", async () => {
-    transcriptResponse = async () => json({ error: "Transcription unavailable" }, 502);
+    transcriptResponse = async () =>
+      json({ error: "Transcription unavailable" }, 502);
     await render(createElement(VoicePage));
     await recordAndSend();
     expect(text()).toContain("Transcription unavailable");
@@ -227,7 +304,12 @@ describe("Recording, transcription, chat and playback controls", () => {
   });
   it("clears messages after a chat response indicates the authenticated user changed", async () => {
     sessionStorage.setItem(`conversationId:${userId}`, id);
-    chatResponse = async () => json({ reply: "Private other-user response", conversationId: newId, userId: "user-2" });
+    chatResponse = async () =>
+      json({
+        reply: "Private other-user response",
+        conversationId: newId,
+        userId: "user-2",
+      });
     await render(createElement(VoicePage));
     await recordAndSend();
     expect(log()).toBeNull();
@@ -243,10 +325,13 @@ describe("Recording, transcription, chat and playback controls", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-audio");
     expect(text()).toContain("Playback denied");
   });
-  it.fails("[known defect] leaving the page while recording should release microphone tracks", async () => {
-    await render(createElement(VoicePage));
-    await click(button("Start Recording"));
-    await unmount();
-    expect(stopTrack).toHaveBeenCalledOnce();
-  });
+  knownIssue(
+    "[known defect] leaving the page while recording should release microphone tracks",
+    async () => {
+      await render(createElement(VoicePage));
+      await click(button("Start Recording"));
+      await unmount();
+      expect(stopTrack).toHaveBeenCalledOnce();
+    },
+  );
 });

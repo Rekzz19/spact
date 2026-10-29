@@ -1,5 +1,18 @@
 // @vitest-environment jsdom
-import { render, button, input, fill, click, submit, json, deferred, finish, text, router } from "./helpers";
+import { knownIssue } from "../known-issues";
+import {
+  render,
+  button,
+  input,
+  fill,
+  click,
+  submit,
+  json,
+  deferred,
+  finish,
+  text,
+  router,
+} from "./helpers";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Login from "@/app/login/page";
@@ -7,7 +20,11 @@ import Register from "@/app/register/page";
 import SetPassword from "@/app/set-password/page";
 import LogoutButton from "@/app/components/LogoutButton";
 
-beforeEach(() => { vi.mocked(fetch).mockReset().mockRejectedValue(new Error("Unexpected request")); });
+beforeEach(() => {
+  vi.mocked(fetch)
+    .mockReset()
+    .mockRejectedValue(new Error("Unexpected request"));
+});
 
 describe("Login page (mocked HTTP and Next navigation)", () => {
   it("renders labelled credentials and registration navigation", async () => {
@@ -24,18 +41,31 @@ describe("Login page (mocked HTTP and Next navigation)", () => {
     await fill(input("Email address"), "person@example.com");
     await fill(input("Password"), "long-password");
     await submit();
-    expect(fetch).toHaveBeenCalledWith("/api/auth/login", expect.objectContaining({ method: "POST", body: JSON.stringify({ email: "person@example.com", password: "long-password" }) }));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "person@example.com",
+          password: "long-password",
+        }),
+      }),
+    );
     expect(router.replace).toHaveBeenCalledWith("/");
     expect(router.refresh).toHaveBeenCalledOnce();
     expect(input("Password").value).toBe("");
   });
   it("shows server rejection and keeps the student on the page", async () => {
-    vi.mocked(fetch).mockResolvedValue(json({ error: "Invalid credentials" }, 401));
+    vi.mocked(fetch).mockResolvedValue(
+      json({ error: "Invalid credentials" }, 401),
+    );
     await render(createElement(Login));
     await fill(input("Email address"), "person@example.com");
     await fill(input("Password"), "wrong-password");
     await submit();
-    expect(document.querySelector('[role="alert"]')?.textContent).toBe("Invalid credentials");
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      "Invalid credentials",
+    );
     expect(router.replace).not.toHaveBeenCalled();
     expect(button("Log in").disabled).toBe(false);
   });
@@ -63,7 +93,9 @@ describe("Login page (mocked HTTP and Next navigation)", () => {
 describe("Register page", () => {
   it("renders an email form and login navigation", async () => {
     await render(createElement(Register));
-    expect(document.querySelector("h1")?.textContent).toBe("Make knowledge stick.");
+    expect(document.querySelector("h1")?.textContent).toBe(
+      "Make knowledge stick.",
+    );
     expect(input("Email address")).not.toBeNull();
     expect(document.querySelector('a[href="/login"]')).not.toBeNull();
   });
@@ -72,14 +104,18 @@ describe("Register page", () => {
     await render(createElement(Register));
     await fill(input("Email address"), "person@example.com");
     await submit();
-    expect(document.querySelector('[role="status"]')?.textContent).toBe("Check your email.");
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(
+      "Check your email.",
+    );
     expect(button("Check your inbox").disabled).toBe(true);
     await fill(input("Email address"), "other@example.com");
     expect(button("Create account").disabled).toBe(false);
     expect(document.querySelector('[role="status"]')).toBeNull();
   });
   it("displays rate-limit errors and allows retry", async () => {
-    vi.mocked(fetch).mockResolvedValue(json({ error: "Too many requests" }, 429));
+    vi.mocked(fetch).mockResolvedValue(
+      json({ error: "Too many requests" }, 429),
+    );
     await render(createElement(Register));
     await fill(input("Email address"), "person@example.com");
     await submit();
@@ -114,7 +150,12 @@ describe("Set-password page", () => {
     await fill(input("Password"), "long-password-one");
     await fill(input("Confirm password"), "long-password-one");
     await submit();
-    expect(fetch).toHaveBeenLastCalledWith("/api/auth/set-password", expect.objectContaining({ body: JSON.stringify({ password: "long-password-one" }) }));
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/auth/set-password",
+      expect.objectContaining({
+        body: JSON.stringify({ password: "long-password-one" }),
+      }),
+    );
     expect(router.push).toHaveBeenCalledWith("/");
   });
   it("shows a failed verification check and leaves submission disabled", async () => {
@@ -123,12 +164,21 @@ describe("Set-password page", () => {
     expect(text()).toContain("Your session has expired.");
     expect(button("Set password").disabled).toBe(true);
   });
-  it.fails("[known defect] opening set-password should verify a session without creating an anonymous identity", async () => {
-    vi.mocked(fetch).mockResolvedValue(json({ userId: "user-1" }));
-    await render(createElement(SetPassword));
-    expect(fetch).toHaveBeenCalledWith("/api/auth/session", expect.objectContaining({ method: "GET" }));
-    expect(fetch).not.toHaveBeenCalledWith("/api/auth/anonymous", expect.anything());
-  });
+  knownIssue(
+    "[known defect] opening set-password should verify a session without creating an anonymous identity",
+    async () => {
+      vi.mocked(fetch).mockResolvedValue(json({ userId: "user-1" }));
+      await render(createElement(SetPassword));
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/auth/session",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(fetch).not.toHaveBeenCalledWith(
+        "/api/auth/anonymous",
+        expect.anything(),
+      );
+    },
+  );
 });
 
 describe("Logout control", () => {
@@ -140,7 +190,9 @@ describe("Logout control", () => {
     expect(router.refresh).toHaveBeenCalledOnce();
   });
   it("keeps the current page and displays failures", async () => {
-    vi.mocked(fetch).mockResolvedValue(json({ error: "Could not log out" }, 500));
+    vi.mocked(fetch).mockResolvedValue(
+      json({ error: "Could not log out" }, 500),
+    );
     await render(createElement(LogoutButton));
     await click(button("Log out"));
     expect(text()).toContain("Could not log out");

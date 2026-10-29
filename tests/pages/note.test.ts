@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import NotePage from "@/app/notes/[id]/page";
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { supabaseMock } from "../helpers";
@@ -38,7 +39,10 @@ describe("Note page access", () => {
   });
 
   it("loads the selected note only when it belongs to the current user", async () => {
-    await render();
+    const html = renderToStaticMarkup(await render());
+    expect(html).toContain("Osmosis");
+    expect(html).toContain("Water movement");
+    expect(html).toContain('href="/"');
     expect(connection).toHaveBeenCalled();
     expect(vi.mocked(connection).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(createSupabaseServerClient).mock.invocationCallOrder[0],

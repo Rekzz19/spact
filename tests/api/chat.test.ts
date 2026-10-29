@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { nebius } from "@/lib/ai/nebius";
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 import { POST } from "@/app/api/chat/route";
+import { saveNote } from "@/lib/notes/notes";
+vi.mock("@/lib/notes/notes", () => ({ saveNote: vi.fn() }));
 import { expectJson, jsonRequest, supabaseMock } from "../helpers";
 
 vi.mock("@/lib/ai/nebius", () => ({
@@ -225,5 +227,118 @@ describe("POST /api/chat", () => {
       { error: "Could not generate an AI response" },
     );
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("executes a valid save_note tool call and confirms only after saving", async () => {
+    vi.mocked(saveNote).mockResolvedValue({
+      id: "note-1",
+      title: "Cells",
+      content: "Cell notes",
+      created_at: "2026-10-28T12:00:00Z",
+    });
+    create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: {
+                  name: "save_note",
+                  arguments: JSON.stringify({
+                    title: "Cells",
+                    content: "Cell notes",
+                  }),
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as Awaited<ReturnType<typeof nebius.chat.completions.create>>);
+    await expectJson(
+      await POST(
+        jsonRequest("chat", {
+          transcript: "Please save notes about cells",
+          conversationId: "11111111-1111-4111-8111-111111111111",
+        }),
+      ),
+      200,
+      {
+        reply: "I've saved your note titled Cells.",
+        userId: "user-1",
+        conversationId: "11111111-1111-4111-8111-111111111111",
+      },
+    );
+    expect(saveNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        title: "Cells",
+        content: "Cell notes",
+        conversationId: "11111111-1111-4111-8111-111111111111",
+      }),
+    );
+  });
+
+  it.each(["not JSON", JSON.stringify({ title: "Missing content" })])(
+    "does not claim to save malformed tool arguments (%s)",
+    async (args) => {
+      create.mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  id: "call-1",
+                  type: "function",
+                  function: { name: "save_note", arguments: args },
+                },
+              ],
+            },
+          },
+        ],
+      } as Awaited<ReturnType<typeof nebius.chat.completions.create>>);
+      await expectJson(await POST(request()), 200, {
+        reply: "Sorry, I couldn't save that note. Please try again.",
+        userId: "user-1",
+        conversationId: "11111111-1111-4111-8111-111111111111",
+      });
+      expect(saveNote).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports tool save failures honestly while preserving a conversational reply", async () => {
+    vi.mocked(saveNote).mockRejectedValue(new Error("Database unavailable"));
+    create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: "call-1",
+                type: "function",
+                function: {
+                  name: "save_note",
+                  arguments: JSON.stringify({
+                    title: "Cells",
+                    content: "Cell notes",
+                  }),
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as Awaited<ReturnType<typeof nebius.chat.completions.create>>);
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    expect((await response.json()).reply).toBe(
+      "Sorry, I couldn't save that note. Please try again.",
+    );
+    expect(db.insert).toHaveBeenCalled();
   });
 });
