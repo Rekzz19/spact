@@ -17,16 +17,16 @@ export default function Home() {
       try {
         const response = await fetch("/api/auth/session", {
           //checkst the user has a session
-          method: "GET", //which endpoint does this go to?
+          method: "GET",
         });
 
         if (response.status === 401) {
-          setAuthStatus("unauthenticated"); //give them an anonymous identity
+          setAuthStatus("unauthenticated");
           return;
         }
 
         if (!response.ok) {
-          throw new Error("Session check failed"); //print failed
+          throw new Error("Session check failed");
         }
 
         // Existing student session

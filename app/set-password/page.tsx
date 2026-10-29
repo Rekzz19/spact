@@ -36,7 +36,6 @@ export default function SetPasswordPage() {
   }, []);
 
   async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
-    //could this potentially cuase an error.
     e.preventDefault();
     setError("");
 
