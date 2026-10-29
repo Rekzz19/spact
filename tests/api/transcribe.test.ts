@@ -19,12 +19,10 @@ vi.mock("@/lib/supabase/supabase-server", () => ({
 beforeEach(() => {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
     auth: {
-      getUser: vi
-        .fn()
-        .mockResolvedValue({
-          data: { user: { id: "guest-1", is_anonymous: true } },
-          error: null,
-        }),
+      getUser: vi.fn().mockResolvedValue({
+        data: { user: { id: "guest-1", is_anonymous: true } },
+        error: null,
+      }),
     },
   } as unknown as Awaited<ReturnType<typeof createSupabaseServerClient>>);
 });
