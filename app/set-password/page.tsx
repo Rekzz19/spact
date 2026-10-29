@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AuthShell, {
+  authInputClass,
+  authButtonClass,
+} from "@/app/components/AuthShell";
 
 export default function SetPasswordPage() {
   const router = useRouter();
@@ -32,7 +36,6 @@ export default function SetPasswordPage() {
   }, []);
 
   async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
-    //could this potentially cuase an error.
     e.preventDefault();
     setError("");
 
@@ -67,41 +70,61 @@ export default function SetPasswordPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-6">
-      <h1 className="mb-2 text-3xl font-bold">Welcome to Spact</h1>
-      <p className="mb-6">Create a password to secure your account.</p>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <AuthShell mode="set-password">
+      <form
+        onSubmit={handleSubmit}
+        aria-busy={loading}
+        className="flex flex-col gap-4"
+      >
+        <label htmlFor="password" className="text-sm font-medium">
+          Password
+        </label>
         <input
+          id="password"
+          name="password"
           type="password"
+          autoComplete="new-password"
+          disabled={loading}
+          aria-describedby={error ? "password-error" : undefined}
           placeholder="Password (12+ characters)"
           value={password}
           minLength={12}
           maxLength={128}
           required
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-lg border p-3"
+          className={authInputClass}
         />
-
+        <label htmlFor="confirm-password" className="text-sm font-medium">
+          Confirm password
+        </label>
         <input
+          id="confirm-password"
+          name="confirmPassword"
           type="password"
+          autoComplete="new-password"
+          disabled={loading}
+          aria-describedby={error ? "password-error" : undefined}
           placeholder="Confirm password"
           value={confirmPassword}
           required
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="rounded-lg border p-3"
+          className={authInputClass}
         />
 
-        {error && <p className="text-red-500">{error}</p>}
+        {error && (
+          <p id="password-error" role="alert" className="text-sm text-red-500">
+            {error}
+          </p>
+        )}
 
         <button
           type="submit"
           disabled={!authenticated || loading}
-          className="rounded-lg bg-blue-600 p-3 text-white disabled:opacity-50"
+          className={authButtonClass}
         >
           {loading ? "Saving..." : "Set password"}
         </button>
       </form>
-    </main>
+    </AuthShell>
   );
 }

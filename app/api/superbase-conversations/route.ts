@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  ConversationError,
+  createConversation,
+} from "@/lib/conversations/conversations";
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 
 export async function POST() {
@@ -15,26 +19,15 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
     }
 
-    // Create a conversation belonging to this user
-    const { data, error } = await supabase
-      .from("conversations")
-      .insert({
-        user_id: user.id,
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error("Supabase error:", error);
-
+    const conversationId = await createConversation(supabase, user.id);
+    return NextResponse.json({ conversationId }, { status: 201 });
+  } catch (error) {
+    if (error instanceof ConversationError) {
       return NextResponse.json(
-        { error: "Failed to create conversation" }, //should be able to let application work w/o stopping totally
-        { status: 500 },
+        { error: error.message },
+        { status: error.status },
       );
     }
-
-    return NextResponse.json({ conversationId: data.id }, { status: 201 });
-  } catch (error) {
     console.error(error);
 
     return NextResponse.json(
@@ -43,5 +36,3 @@ export async function POST() {
     );
   }
 }
-
-//

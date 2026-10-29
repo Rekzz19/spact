@@ -19,7 +19,10 @@ describe("POST /api/superbase-conversations", () => {
   it("creates a conversation for the authenticated user", async () => {
     await expectJson(await POST(), 201, { conversationId: "conversation-1" });
     expect(db.from).toHaveBeenCalledWith("conversations");
-    expect(db.insert).toHaveBeenCalledWith({ user_id: "user-1" });
+    expect(db.insert).toHaveBeenCalledWith({
+      user_id: "user-1",
+      id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
     expect(db.insertedSelect).toHaveBeenCalledWith("id");
   });
 

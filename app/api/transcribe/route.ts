@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-//export const runtime = "nodejs";
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -57,6 +55,7 @@ export async function POST(request: NextRequest) {
 
     const transcript =
       data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
+    console.log("THIS IS transcript", transcript);
 
     return NextResponse.json({ transcript });
   } catch (error) {
@@ -68,12 +67,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-/**
- * Need some auth, rate limiting and audio validation.
- * first commit here
- * next sending the result to the ai model,
- * getting a response, using the response to create schedule,
- * sending alarms/notifications.
- *
- * TEST TRANSCRIPTION AND COMMIT.
- */

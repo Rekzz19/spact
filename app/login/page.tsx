@@ -1,6 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import AuthShell, {
+  authInputClass,
+  authButtonClass,
+} from "@/app/components/AuthShell";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -39,7 +42,7 @@ export default function Login() {
         throw new Error(data.error || "Unable to log in. Please try again.");
       }
       setPassword("");
-      router.replace("/voice-interface");
+      router.replace("/");
       router.refresh();
     } catch (err) {
       setError(
@@ -54,16 +57,13 @@ export default function Login() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center p-6">
-      <h1 className="mb-2 text-3xl font-bold">Welcome back to Spact</h1>
-      <p className="mb-6">Log in to your account.</p>
-
+    <AuthShell mode="login">
       <form
         onSubmit={handleSubmit}
         aria-busy={loading}
         className="flex flex-col gap-4"
       >
-        <label htmlFor="email" className="sr-only">
+        <label htmlFor="email" className="text-sm font-medium">
           Email address
         </label>
         <input
@@ -79,10 +79,10 @@ export default function Login() {
           }}
           required
           disabled={loading}
-          className="rounded-lg border p-3"
+          className={authInputClass}
           aria-describedby={error ? "login-error" : undefined}
         />
-        <label htmlFor="password" className="sr-only">
+        <label htmlFor="password" className="text-sm font-medium">
           Password
         </label>
         <input
@@ -98,7 +98,7 @@ export default function Login() {
           }}
           required
           disabled={loading}
-          className="rounded-lg border p-3"
+          className={authInputClass}
           aria-describedby={error ? "login-error" : undefined}
         />
         {error && (
@@ -106,20 +106,10 @@ export default function Login() {
             {error}
           </p>
         )}
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-lg bg-blue-600 p-3 text-white disabled:opacity-50"
-        >
+        <button type="submit" disabled={loading} className={authButtonClass}>
           {loading ? "Logging in..." : "Log in"}
         </button>
       </form>
-      <p className="mt-4 text-sm">
-        Don’t have an account?{" "}
-        <Link href="/register" className="text-blue-600 underline">
-          Register
-        </Link>
-      </p>
-    </main>
+    </AuthShell>
   );
 }
