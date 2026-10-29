@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
-import { saveNote } from "@/lib/notes/notes";
+import { saveNote, NoteValidationError } from "@/lib/notes/notes";
 
 export async function GET() {
   try {
@@ -62,6 +62,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ note }, { status: 201 });
   } catch (error) {
+    if (error instanceof NoteValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("Notes API error:", error);
 
     return NextResponse.json(

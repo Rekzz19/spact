@@ -2,6 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/speak/route";
 import { expectJson, jsonRequest } from "../helpers";
 
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
+vi.mock("@/lib/supabase/supabase-server", () => ({
+  createSupabaseServerClient: vi.fn(),
+}));
+beforeEach(() => {
+  vi.mocked(createSupabaseServerClient).mockResolvedValue({
+    auth: {
+      getUser: vi
+        .fn()
+        .mockResolvedValue({
+          data: { user: { id: "guest-1", is_anonymous: true } },
+          error: null,
+        }),
+    },
+  } as unknown as Awaited<ReturnType<typeof createSupabaseServerClient>>);
+});
+
 describe("POST /api/speak", () => {
   beforeEach(() => vi.stubEnv("SPACT_DEEPGRAM_API_KEY", "test-deepgram"));
 

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { knownIssue } from "../known-issues";
 import { POST } from "@/app/api/notes/route";
 import { saveNote } from "@/lib/notes/notes";
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
@@ -124,10 +123,7 @@ describe("Note writing with mocked Supabase, real route and saveNote", () => {
     ).rejects.toThrow("Invalid note title or content");
     expect(from).not.toHaveBeenCalled();
   });
-  knownIssue(
-    "[known defect] invalid note fields should return 400 rather than 500",
-    async () => {
-      expect((await request({ title: "", content: "body" })).status).toBe(400);
-    },
-  );
+  it("[regression] invalid note fields should return 400 rather than 500", async () => {
+    expect((await request({ title: "", content: "body" })).status).toBe(400);
+  });
 });

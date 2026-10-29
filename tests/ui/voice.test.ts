@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { knownIssue } from "../known-issues";
 import {
   render,
   unmount,
@@ -45,8 +44,12 @@ class Recorder {
   ondataavailable?: (event: { data: Blob }) => void;
   onstop?: () => Promise<void>;
   completion?: Promise<void>;
-  start = vi.fn();
+  state: RecordingState = "inactive";
+  start = vi.fn(() => {
+    this.state = "recording";
+  });
   stop = vi.fn(() => {
+    this.state = "inactive";
     this.ondataavailable?.({
       data: new Blob(["recorded-audio"], { type: this.mimeType }),
     });
@@ -333,15 +336,26 @@ describe("Recording, transcription, chat and playback controls", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-audio");
     expect(text()).toContain("Playback denied");
   });
-  knownIssue(
-    "[known defect] leaving the page while recording should release microphone tracks",
-    async () => {
-      await render(createElement(VoicePage));
-      await click(button("Start Recording"));
-      await unmount();
-      expect(stopTrack).toHaveBeenCalledOnce();
-    },
-  );
+  it("[regression] leaving the page while recording should release microphone tracks", async () => {
+    await render(createElement(VoicePage));
+    await click(button("Start Recording"));
+    await unmount();
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(Recorder.last.stop).toHaveBeenCalledOnce();
+    expect(callsTo("/api/transcribe")).toHaveLength(0);
+  });
+  it("releases microphone permission arriving after the page unmounts", async () => {
+    const permission = deferred<{
+      getTracks: () => { stop: typeof stopTrack }[];
+    }>();
+    getUserMedia.mockReturnValue(permission.promise);
+    await render(createElement(VoicePage));
+    await click(button("Start Recording"));
+    await unmount();
+    await finish(permission, { getTracks: () => [{ stop: stopTrack }] });
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(callsTo("/api/transcribe")).toHaveLength(0);
+  });
 });
 
 describe("Stop speaking playback control", () => {

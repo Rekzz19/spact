@@ -4,10 +4,10 @@ Run these commands from `spact/`:
 
 ```sh
 npm ci
-npm test                   # All regression checks, including labelled expected failures
+npm test                   # All tests; no expected-failure wrappers
 npm run test:api           # API handlers and server conversation/notes behavior
 npm run test:ui            # Interactive pages/components plus page rendering checks
-npm run test:known-issues  # Strict defect reproduction: currently exits 1 with six failures
+npm run test:known-issues  # Regression checks for the six previously known defects
 npx tsc --noEmit
 ```
 
@@ -58,25 +58,21 @@ additional React test libraries are needed.
   91-minute expiry, long active sessions, previous-row preservation, invalid IDs,
   missing conversations, and unauthorised API access.
 
-## Known defects (not silently fixed)
+## Resolved defects and regression checks
 
-These tests assert desired behavior and use `knownIssue` from `known-issues.ts`.
-Normally this is Vitest's `it.fails`: a still-failing assertion counts as an
-**expected failure**, not evidence that the behavior works. If a defect is fixed,
-Vitest fails an unexpectedly passing expected-failure test; convert it to an
-ordinary regression test as part of the fix. `test:known-issues` disables the
-expected-failure wrapper so the actual assertions fail visibly.
+The six previously expected failures are now ordinary passing tests labelled
+`[regression]`. The `knownIssue`/`it.fails` wrapper was removed. The existing
+`test:known-issues` command remains available but now runs these normal regression
+checks and should exit successfully.
 
-| Desired behavior                                                          | Current observation                                                   | Reproduction test                |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
-| Invalid note fields return 400                                            | `saveNote` rejects them, but POST maps the validation error to 500    | `api/notes-write.test.ts`        |
-| Opening set-password checks the existing session without creating a user  | Page posts to `/api/auth/anonymous`, which can create a guest session | `ui/auth.test.ts`                |
-| Navigating away during recording releases microphone tracks               | No unmount cleanup releases the active stream                         | `ui/voice.test.ts`               |
-| Unauthenticated speech requests are blocked before provider access        | `/api/speak` calls Deepgram without a session check                   | `api/service-boundaries.test.ts` |
-| Unauthenticated transcription requests are blocked before provider access | `/api/transcribe` calls Deepgram without a session check              | `api/service-boundaries.test.ts` |
-| TTS validates text before provider access                                 | `/api/speak` forwards a non-string text value                         | `api/service-boundaries.test.ts` |
+| Previous defect                                | Correction                                                         | Test                             |
+| ---------------------------------------------- | ------------------------------------------------------------------ | -------------------------------- |
+| Invalid notes returned 500                     | A typed validation error maps to HTTP 400                          | `api/notes-write.test.ts`        |
+| Set-password could create a guest on load      | Uses GET session lookup and rejects anonymous sessions             | `ui/auth.test.ts`                |
+| Navigating away left the microphone running    | Stops active recorder and tracks; releases late permission streams | `ui/voice.test.ts`               |
+| Unauthenticated callers could generate speech  | Checks the Supabase session before contacting Deepgram             | `api/service-boundaries.test.ts` |
+| Unauthenticated callers could transcribe audio | Checks the Supabase session before contacting Deepgram             | `api/service-boundaries.test.ts` |
+| TTS accepted non-string text                   | Validates nonblank string input before provider access             | `api/service-boundaries.test.ts` |
 
-These are application defects or access-policy decisions needing follow-up; this
-change deliberately modifies test infrastructure and tests only. Anonymous users
-with a valid Supabase session are distinct from unauthenticated callers: guest
-chat/history and note writing remain tested as supported behavior.
+Authenticated anonymous users still have access to voice, chat history and notes.
+Production speech diagnostics and Web Audio playback/fallback remain enabled.

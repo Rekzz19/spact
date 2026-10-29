@@ -24,6 +24,15 @@ export default function Home() {
     return () => {
       mountedRef.current = false;
       speechRequestRef.current?.abort();
+      const recorder = recorderRef.current;
+      if (recorder) {
+        recorder.onstop = null;
+        recorder.ondataavailable = null;
+        if (recorder.state === "recording" || recorder.state === "paused")
+          recorder.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     };
   }, []);
 
@@ -217,6 +226,12 @@ export default function Home() {
         //user audio input
         audio: true,
       });
+
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        busyRef.current = false;
+        return;
+      }
 
       streamRef.current = stream;
       chunksRef.current = [];

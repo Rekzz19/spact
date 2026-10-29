@@ -108,8 +108,8 @@ voice behavior.
   that a provider request succeeded.
 - Browser reports currently use Info-level logs, including reported playback
   errors. Deepgram failures use Error-level server logs, so include both levels.
-- This does not fix the separately documented missing auth checks on the existing
-  speech/transcription routes.
+- Speech and transcription routes now require an existing Supabase session;
+  authenticated anonymous guests remain supported.
 
 ## Checks
 

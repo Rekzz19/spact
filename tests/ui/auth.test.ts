@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { knownIssue } from "../known-issues";
 import {
   render,
   button,
@@ -132,11 +131,16 @@ describe("Set-password page", () => {
     expect(document.querySelector("h1")?.textContent).toBe("Make it yours.");
     expect(input("Confirm password").autocomplete).toBe("new-password");
     expect(button("Set password").disabled).toBe(true);
-    await finish(pending, json({ userId: "user-1" }));
+    await finish(
+      pending,
+      json({ authenticated: true, userId: "user-1", anonymous: false }),
+    );
     expect(button("Set password").disabled).toBe(false);
   });
   it("does not submit mismatched passwords", async () => {
-    vi.mocked(fetch).mockResolvedValue(json({ userId: "user-1" }));
+    vi.mocked(fetch).mockResolvedValue(
+      json({ authenticated: true, userId: "user-1", anonymous: false }),
+    );
     await render(createElement(SetPassword));
     await fill(input("Password"), "long-password-one");
     await fill(input("Confirm password"), "long-password-two");
@@ -145,7 +149,11 @@ describe("Set-password page", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
   it("sets a matching password and returns to voice after success", async () => {
-    vi.mocked(fetch).mockResolvedValue(json({ success: true }));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        json({ authenticated: true, userId: "user-1", anonymous: false }),
+      )
+      .mockResolvedValue(json({ success: true }));
     await render(createElement(SetPassword));
     await fill(input("Password"), "long-password-one");
     await fill(input("Confirm password"), "long-password-one");
@@ -164,21 +172,32 @@ describe("Set-password page", () => {
     expect(text()).toContain("Your session has expired.");
     expect(button("Set password").disabled).toBe(true);
   });
-  knownIssue(
-    "[known defect] opening set-password should verify a session without creating an anonymous identity",
-    async () => {
-      vi.mocked(fetch).mockResolvedValue(json({ userId: "user-1" }));
-      await render(createElement(SetPassword));
-      expect(fetch).toHaveBeenCalledWith(
-        "/api/auth/session",
-        expect.objectContaining({ method: "GET" }),
-      );
-      expect(fetch).not.toHaveBeenCalledWith(
-        "/api/auth/anonymous",
-        expect.anything(),
-      );
-    },
-  );
+  it("[regression] opening set-password should verify a session without creating an anonymous identity", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      json({ authenticated: true, userId: "user-1", anonymous: false }),
+    );
+    await render(createElement(SetPassword));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth/session",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      "/api/auth/anonymous",
+      expect.anything(),
+    );
+  });
+});
+
+describe("Set-password session protection", () => {
+  it("does not enable password submission for an anonymous guest", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      json({ authenticated: true, anonymous: true, userId: "guest-1" }),
+    );
+    await render(createElement(SetPassword));
+    expect(button("Set password").disabled).toBe(true);
+    expect(text()).toContain("Verify your email");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });
 
 describe("Logout control", () => {

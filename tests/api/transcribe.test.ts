@@ -12,6 +12,23 @@ function recording(size = 4, type = "audio/webm") {
   });
 }
 
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
+vi.mock("@/lib/supabase/supabase-server", () => ({
+  createSupabaseServerClient: vi.fn(),
+}));
+beforeEach(() => {
+  vi.mocked(createSupabaseServerClient).mockResolvedValue({
+    auth: {
+      getUser: vi
+        .fn()
+        .mockResolvedValue({
+          data: { user: { id: "guest-1", is_anonymous: true } },
+          error: null,
+        }),
+    },
+  } as unknown as Awaited<ReturnType<typeof createSupabaseServerClient>>);
+});
+
 describe("POST /api/transcribe", () => {
   beforeEach(() => vi.stubEnv("SPACT_DEEPGRAM_API_KEY", "test-deepgram"));
 
