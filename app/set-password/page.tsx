@@ -18,8 +18,9 @@ export default function SetPasswordPage() {
 
   useEffect(() => {
     async function checkSession() {
-      const response = await fetch("/api/auth/anonymous", {
-        method: "POST",
+      const response = await fetch("/api/auth/session", {
+        method: "GET",
+        cache: "no-store",
       });
 
       if (!response.ok) {
@@ -27,6 +28,11 @@ export default function SetPasswordPage() {
         return;
       }
 
+      const session = await response.json();
+      if (!session.authenticated || session.anonymous) {
+        setError("Verify your email before setting a password.");
+        return;
+      }
       setAuthenticated(true);
     }
 

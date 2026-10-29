@@ -29,6 +29,22 @@ let container: HTMLDivElement;
 export const matchMedia = vi.fn();
 
 beforeEach(() => {
+  // jsdom 26 does not implement Blob.arrayBuffer(). Node 24's Response.blob()
+  // can use that DOM Blob, unlike older Node versions. Supply the browser API
+  // through FileReader rather than letting Web Audio tests hit HTML fallback.
+  if (typeof Blob.prototype.arrayBuffer !== "function") {
+    Object.defineProperty(Blob.prototype, "arrayBuffer", {
+      configurable: true,
+      value: function (this: Blob): Promise<ArrayBuffer> {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as ArrayBuffer);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsArrayBuffer(this);
+        });
+      },
+    });
+  }
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   sessionStorage.clear();
   localStorage.clear();

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { safeDiagnosticString } from "@/lib/diagnostics/events";
+import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 
 export async function POST(request: Request) {
   const suppliedId = request.headers.get("x-spact-speech-id");
@@ -28,6 +29,25 @@ export async function POST(request: Request) {
   log("speech.request.started");
   try {
     const { AiRes } = await request.json();
+
+    if (typeof AiRes !== "string" || !AiRes.trim()) {
+      return NextResponse.json(
+        { error: "Speech text is required" },
+        { status: 400, headers: { "X-Spact-Speech-Id": attemptId } },
+      );
+    }
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
+      log("speech.request.unauthorised", {}, true);
+      return NextResponse.json(
+        { error: "Unauthorised" },
+        { status: 401, headers: { "X-Spact-Speech-Id": attemptId } },
+      );
+    }
 
     const response = await fetch(
       "https://api.deepgram.com/v1/speak?model=aura-2-thalia-en",

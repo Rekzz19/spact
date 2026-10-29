@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:api": "vitest run tests/api",
     "test:ui": "vitest run tests/ui tests/pages",
-    "test:known-issues": "SPACT_STRICT_TESTS=1 vitest run -t \"known defect\""
+    "test:known-issues": "vitest run -t \"\\[regression\\]\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

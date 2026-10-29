@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export class NoteValidationError extends Error {}
+
 type SaveNoteInput = {
   supabase: SupabaseClient;
   userId: string;
@@ -23,7 +25,7 @@ export async function saveNote({
     !content.trim() ||
     content.length > 20000
   ) {
-    throw new Error("Invalid note title or content");
+    throw new NoteValidationError("Invalid note title or content");
   }
 
   if (conversationId) {
