@@ -26,13 +26,13 @@ export default function AuthShell({
     >
       <header className="flex items-center justify-between px-6 py-7 sm:px-10">
         <Link
-          href="/home"
+          href="/"
           className="rounded text-2xl font-bold tracking-tight text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
         >
           Spact
         </Link>
         <Link
-          href="/"
+          href="/voice-interface"
           className="text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400"
         >
           Back to voice <span aria-hidden="true">↗</span>

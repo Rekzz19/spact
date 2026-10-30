@@ -14,6 +14,7 @@ vi.mock("@/lib/supabase/supabase-server", () => ({
 }));
 vi.mock("@/app/components/Sidebar", () => ({ default: () => null }));
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
   redirect: vi.fn(() => {
     throw new Error("redirect");
   }),
@@ -42,7 +43,7 @@ describe("Note page access", () => {
     const html = renderToStaticMarkup(await render());
     expect(html).toContain("Osmosis");
     expect(html).toContain("Water movement");
-    expect(html).toContain('href="/"');
+    expect(html).toContain('href="/voice-interface"');
     expect(connection).toHaveBeenCalled();
     expect(vi.mocked(connection).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(createSupabaseServerClient).mock.invocationCallOrder[0],

@@ -50,7 +50,7 @@ describe("Login page (mocked HTTP and Next navigation)", () => {
         }),
       }),
     );
-    expect(router.replace).toHaveBeenCalledWith("/");
+    expect(router.replace).toHaveBeenCalledWith("/voice-interface");
     expect(router.refresh).toHaveBeenCalledOnce();
     expect(input("Password").value).toBe("");
   });
@@ -164,7 +164,7 @@ describe("Set-password page", () => {
         body: JSON.stringify({ password: "long-password-one" }),
       }),
     );
-    expect(router.push).toHaveBeenCalledWith("/");
+    expect(router.push).toHaveBeenCalledWith("/voice-interface");
   });
   it("shows a failed verification check and leaves submission disabled", async () => {
     vi.mocked(fetch).mockResolvedValue(json({ error: "Expired" }, 401));
