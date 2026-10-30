@@ -11,7 +11,7 @@ import {
 } from "./helpers";
 import { act, createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import Home from "@/app/home/page";
+import Home from "@/app/page";
 import AnimatedText from "@/app/components/AnimatedText";
 import ConversationMessages from "@/app/components/ConversationMessages";
 
@@ -24,7 +24,7 @@ describe("Home page and animation", () => {
     expect(document.querySelector("h1")?.textContent).toContain("Say it.");
     expect(text()).toContain("Your AI revision partner.");
     await click(button("Start speaking"));
-    expect(router.push).toHaveBeenCalledWith("/");
+    expect(router.push).toHaveBeenCalledWith("/voice-interface");
     expect(document.querySelector('a[href="/"]')?.textContent).toBe("Spact");
     expect(
       document.querySelector('header a[href="/register"]')?.textContent,

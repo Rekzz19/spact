@@ -83,7 +83,7 @@ export default function Sidebar() {
         <div className="flex h-full flex-col overflow-y-auto p-6">
           <div className="mb-8 flex items-center justify-between">
             <h2 id="sidebar-title" className="text-xl font-bold">
-              <Link href="/home" onClick={close}>
+              <Link href="/" onClick={close}>
                 Spact
               </Link>
             </h2>
@@ -108,8 +108,8 @@ export default function Sidebar() {
           </div>
           <nav aria-label="Main navigation" className="flex flex-col gap-2">
             <Link
-              href="/home"
-              aria-current={pathname === "/home" ? "page" : undefined}
+              href="/"
+              aria-current={pathname === "/" ? "page" : undefined}
               onClick={close}
               className="rounded-lg px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900"
             >

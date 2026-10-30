@@ -42,7 +42,7 @@ export default function Login() {
         throw new Error(data.error || "Unable to log in. Please try again.");
       }
       setPassword("");
-      router.replace("/");
+      router.replace("/voice-interface");
       router.refresh();
     } catch (err) {
       setError(

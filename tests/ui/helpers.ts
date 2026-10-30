@@ -117,10 +117,15 @@ export function input(label: string): HTMLInputElement {
     throw new Error(`Input not found: ${label}`);
   return result;
 }
-export async function fill(element: HTMLInputElement, value: string) {
+export async function fill(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
+      element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype,
       "value",
     )!.set!.call(element, value);
     element.dispatchEvent(new Event("input", { bubbles: true }));

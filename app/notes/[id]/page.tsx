@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
-import Note from "@/app/components/Note";
+import NoteEditor from "@/app/components/NoteEditor";
 import Sidebar from "@/app/components/Sidebar";
 import { createSupabaseServerClient } from "@/lib/supabase/supabase-server";
 
@@ -35,14 +35,14 @@ export default async function NotePage({
       <header className="flex items-center justify-between p-6">
         <Sidebar />
         <Link
-          href="/"
+          href="/voice-interface"
           className="rounded-lg border px-4 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-900"
         >
           Back to Voice
         </Link>
       </header>
       <main className="flex-1 px-6 py-10 sm:px-10">
-        <Note title={note.title} body={note.content} />
+        <NoteEditor key={id} id={id} title={note.title} body={note.content} />
       </main>
     </div>
   );

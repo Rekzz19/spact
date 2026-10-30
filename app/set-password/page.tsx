@@ -67,7 +67,7 @@ export default function SetPasswordPage() {
         throw new Error(result.error ?? "Password setup failed");
       }
 
-      router.push("/");
+      router.push("/voice-interface");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
